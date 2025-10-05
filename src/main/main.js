@@ -259,7 +259,7 @@ ipcMain.handle('delete-photos', async (event, { accountId, fanpageId, photoIds, 
 
     // Sử dụng session từ browser riêng của fanpage
     const HeadlessDeleter = require('./automation/headless-deleter');
-    const headlessDeleter = new HeadlessDeleter(mainWindow, 5);
+    const headlessDeleter = new HeadlessDeleter(mainWindow, 1);
     
     // Lấy session từ context của fanpage browser
     const sessionState = await fanpageBrowser.context.storageState();
@@ -267,11 +267,8 @@ ipcMain.handle('delete-photos', async (event, { accountId, fanpageId, photoIds, 
     
     headlessDeleter.setSession(sessionState);
     
-    // Chuyển photoIds thành array photos
-    const photos = photoIds.map(id => ({ id, url: id }));
-    
-    // Xóa song song
-    const result = await headlessDeleter.deletePhotosParallel(photos, fanpageUrl);
+    // Xóa TẤT CẢ ảnh trên fanpage (không cần scan trước)
+    const result = await headlessDeleter.deleteAllPhotosOnFanpage(fanpageUrl);
     
     // Close browser sau khi xong
     await headlessDeleter.close();

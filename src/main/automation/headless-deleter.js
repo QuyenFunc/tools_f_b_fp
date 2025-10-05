@@ -29,6 +29,181 @@ class HeadlessDeleter {
     this.sessionState = sessionState;
   }
 
+  // XÓA TẤT CẢ ảnh trên trang - Đơn giản: Click ảnh đầu tiên → Xóa → Lặp lại
+  async deleteAllPhotosOnPage(page, fanpageUrl, browserIndex) {
+    try {
+      // Vào trang ảnh của fanpage
+      const photosUrl = fanpageUrl.includes('?') 
+        ? `${fanpageUrl}&sk=photos_by` 
+        : `${fanpageUrl}?sk=photos_by`;
+      
+      this.log(`[Browser ${browserIndex}] Vao trang anh: ${photosUrl}`, 'info');
+      await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForTimeout(3000);
+      
+      let deletedCount = 0;
+      let failedCount = 0;
+      let noMorePhotos = false;
+      
+      // Lặp xóa cho đến khi không còn ảnh
+      while (!noMorePhotos) {
+        this.log(`[Browser ${browserIndex}] Deleted: ${deletedCount}, Failed: ${failedCount}`, 'info');
+        
+        try {
+          // Tìm ảnh đầu tiên trên trang
+          const photoFound = await page.evaluate(() => {
+            const images = document.querySelectorAll('img[src*="scontent"]');
+            
+            for (const img of images) {
+              const rect = img.getBoundingClientRect();
+              const src = img.src;
+              
+              // Bỏ qua emoji, avatar, icon
+              if (src && !src.includes('emoji') && !src.includes('static') && rect.width > 80) {
+                // Tìm link cha (để click mở ảnh)
+                const link = img.closest('a[href*="/photo/"], a[href*="fbid="]');
+                
+                if (link) {
+                  link.scrollIntoView({ block: 'center' });
+                  link.click();
+                  console.log('✓ Đã click vào ảnh');
+                  return true;
+                }
+              }
+            }
+            
+            console.log('✗ Không còn ảnh');
+            return false;
+          });
+          
+          if (!photoFound) {
+            this.log(`[Browser ${browserIndex}] Khong con anh de xoa`, 'info');
+            noMorePhotos = true;
+            break;
+          }
+          
+          // Đợi ảnh mở popup
+          await page.waitForTimeout(2000);
+          
+          // Click nút menu (3 chấm)
+          const menuClicked = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('div[role="button"], i[data-visualcompletion="css-img"]');
+            
+            for (const btn of buttons) {
+              const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+              
+              if (ariaLabel.includes('more') || ariaLabel.includes('hành động') || ariaLabel.includes('actions')) {
+                const clickable = btn.closest('div[role="button"]') || btn;
+                clickable.click();
+                console.log('✓ Đã click menu');
+                return true;
+              }
+            }
+            
+            return false;
+          });
+          
+          if (!menuClicked) {
+            this.log(`[Browser ${browserIndex}] Khong tim thay menu`, 'warning');
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(500);
+            failedCount++;
+            continue;
+          }
+          
+          await page.waitForTimeout(1000);
+          
+          // Click "Xóa ảnh"
+          const deleteClicked = await page.evaluate(() => {
+            const items = document.querySelectorAll('div[role="menuitem"], span');
+            
+            for (const item of items) {
+              const text = item.textContent.trim();
+              
+              if (text.includes('Xóa ảnh') || text.includes('Delete photo')) {
+                const clickable = item.closest('div[role="menuitem"]') || item;
+                clickable.click();
+                console.log('✓ Đã click "Xóa ảnh"');
+                return true;
+              }
+            }
+            
+            return false;
+          });
+          
+          if (!deleteClicked) {
+            this.log(`[Browser ${browserIndex}] Khong tim thay "Xoa anh"`, 'warning');
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(500);
+            failedCount++;
+            continue;
+          }
+          
+          await page.waitForTimeout(1000);
+          
+          // Xác nhận xóa
+          const confirmed = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('div[role="button"], button');
+            
+            for (const btn of buttons) {
+              const text = btn.textContent.trim();
+              
+              if (text === 'Xóa' || text === 'Delete') {
+                btn.click();
+                console.log('✓ Đã xác nhận xóa');
+                return true;
+              }
+            }
+            
+            return false;
+          });
+          
+          if (confirmed) {
+            deletedCount++;
+            this.log(`[Browser ${browserIndex}] ✓ Xoa thanh cong: ${deletedCount}`, 'success');
+            await page.waitForTimeout(1500);
+            
+            // Quay lại trang ảnh
+            await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+            await page.waitForTimeout(2000);
+          } else {
+            this.log(`[Browser ${browserIndex}] Khong xac nhan duoc`, 'warning');
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(500);
+            failedCount++;
+          }
+          
+        } catch (error) {
+          this.log(`[Browser ${browserIndex}] Loi: ${error.message}`, 'error');
+          failedCount++;
+          
+          // Thử escape và quay lại
+          await page.keyboard.press('Escape').catch(() => {});
+          await page.waitForTimeout(500);
+          await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+          await page.waitForTimeout(2000);
+        }
+      }
+      
+      return {
+        success: true,
+        deleted: deletedCount,
+        failed: failedCount,
+        total: deletedCount + failedCount
+      };
+      
+    } catch (error) {
+      this.log(`[Browser ${browserIndex}] Loi nghiem trong: ${error.message}`, 'error');
+      return {
+        success: false,
+        deleted: 0,
+        failed: 0,
+        total: 0,
+        error: error.message
+      };
+    }
+  }
+
   // Xóa 1 ảnh theo ĐÚNG FLOW Facebook: Scroll → Click cây bút → Xóa ảnh → Xóa
   async deleteSinglePhotoFromGrid(page, photoIndex, browserIndex) {
     try {
@@ -335,6 +510,59 @@ class HeadlessDeleter {
       total,
       elapsed,
       results: flatResults
+    };
+  }
+
+  // XÓA TẤT CẢ ảnh của 1 fanpage - Đơn giản & Tuần tự
+  async deleteAllPhotosOnFanpage(fanpageUrl) {
+    if (!this.sessionState) {
+      throw new Error('Chua co session state');
+    }
+    
+    this.log('🗑️ BAT DAU XOA ANH!', 'success');
+    this.log(`📄 Fanpage: ${fanpageUrl}`, 'info');
+    
+    const startTime = Date.now();
+    
+    // Tạo 1 browser duy nhất
+    const browser = await chromium.launch({
+      headless: false, // DEBUG: Hiển thị browser
+      args: [
+        '--start-maximized',
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
+    });
+    
+    this.browsers.push(browser);
+    
+    const context = await browser.newContext({
+      ...this.sessionState,
+      viewport: { width: 1920, height: 1080 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    });
+    
+    const page = await context.newPage();
+    
+    // Xóa tất cả ảnh
+    const result = await this.deleteAllPhotosOnPage(page, fanpageUrl, 1);
+    
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    
+    this.log('🎉 HOAN THANH XOA ANH!', 'success');
+    this.log(`✓ Thanh cong: ${result.deleted}`, 'success');
+    this.log(`✗ That bai: ${result.failed}`, result.failed > 0 ? 'warning' : 'info');
+    this.log(`⏱️ Thoi gian: ${elapsed}s`, 'success');
+    
+    // Đóng browser
+    await browser.close();
+    
+    return {
+      success: true,
+      deleted: result.deleted,
+      failed: result.failed,
+      total: result.deleted + result.failed
     };
   }
 
