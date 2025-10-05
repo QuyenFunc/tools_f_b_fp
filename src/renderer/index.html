@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Facebook Page Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+      <div class="login-card">
+        <div class="login-header">
+          <h1>Facebook Page Manager</h1>
+          <p>Quản lý nhiều tài khoản & Fanpage</p>
+        </div>
+
+        <div id="savedAccountsDiv" class="saved-accounts" style="display: none;">
+          <h3>Tài khoản đã lưu</h3>
+          <div id="savedAccountsList" class="saved-accounts-list"></div>
+          <button id="clearAllAccountsBtn" class="btn btn-secondary btn-small">Xóa tất cả</button>
+        </div>
+
+        <div class="login-form-section">
+          <h3>Đăng nhập tài khoản mới</h3>
+          <form id="loginForm">
+            <div class="form-group">
+              <label for="email">Email hoặc Số điện thoại</label>
+              <input type="text" id="email" name="email" required autocomplete="username">
+            </div>
+            
+            <div class="form-group">
+              <label for="password">Mật khẩu</label>
+              <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            
+            <div class="form-group checkbox">
+              <label>
+                <input type="checkbox" id="saveSession" name="saveSession" checked>
+                Lưu phiên đăng nhập
+              </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-large">Đăng nhập</button>
+          </form>
+        </div>
+
+        <div class="info-box">
+          <p><strong>Lưu ý:</strong></p>
+          <ul>
+            <li>Có thể thêm nhiều tài khoản và làm việc song song</li>
+            <li>Thông tin được mã hóa an toàn</li>
+            <li>Hỗ trợ xác minh 2FA</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="appScreen" class="app-screen" style="display: none;">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2>FB Manager</h2>
+        </div>
+
+        <div class="accounts-section">
+          <div class="section-title">
+            <span>Tài khoản</span>
+            <button id="addAccountBtn" class="btn-icon" title="Thêm tài khoản">+</button>
+          </div>
+          <div id="accountsList" class="accounts-list"></div>
+        </div>
+
+        <div class="queue-status">
+          <h4>Hàng đợi</h4>
+          <div id="queueInfo" class="queue-info">
+            <div class="queue-item">
+              <span>Đang chạy:</span>
+              <strong id="currentTaskCount">0</strong>
+            </div>
+            <div class="queue-item">
+              <span>Chờ xử lý:</span>
+              <strong id="pendingTaskCount">0</strong>
+            </div>
+          </div>
+          <div id="currentTaskDisplay" class="current-task"></div>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="main-content">
+        <!-- Account Detail View -->
+        <div id="accountDetailView" class="account-detail-view" style="display: none;">
+          <div class="account-header">
+            <div class="account-info">
+              <h2 id="currentAccountName">Tài khoản</h2>
+              <button id="logoutAccountBtn" class="btn btn-danger btn-small">Đăng xuất</button>
+            </div>
+          </div>
+
+          <!-- Fanpage Selection -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Chọn Fanpage (có thể chọn nhiều)</h3>
+              <button id="reloadFanpagesBtn" class="btn btn-secondary btn-small">Tải lại</button>
+            </div>
+            <div id="fanpageList" class="fanpage-grid">
+              <p class="loading">Đang tải...</p>
+            </div>
+            <p class="hint-text">Nhấn vào fanpage để chọn/bỏ chọn. Có thể chọn nhiều fanpage cùng lúc.</p>
+          </div>
+
+          <!-- Selected Fanpages Actions -->
+          <div id="fanpageActions" class="card" style="display: none;">
+            <div class="card-header">
+              <h3>Fanpage đã chọn (<span id="selectedPagesCount">0</span>)</h3>
+            </div>
+            
+            <div id="selectedPagesList" class="selected-pages-list"></div>
+
+            <div class="actions-grid">
+              <button id="deleteAllPhotosBtn" class="btn btn-danger btn-large">
+                Xóa tất cả ảnh
+              </button>
+              <button id="uploadPhotosBtn" class="btn btn-success btn-large">
+                Thêm ảnh
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload Dialog -->
+        <div id="uploadDialog" class="upload-dialog" style="display: none;">
+          <div class="dialog-content">
+            <div class="dialog-header">
+              <h3>Thêm ảnh mới</h3>
+              <button id="closeUploadDialogBtn" class="btn-close">✕</button>
+            </div>
+
+            <div class="dialog-body">
+              <button id="selectFolderBtn" class="btn btn-primary">Chọn thư mục ảnh</button>
+              <p id="selectedFolder" class="selected-folder"></p>
+
+              <div id="uploadGrid" class="upload-grid"></div>
+
+              <div id="uploadActions" class="dialog-actions" style="display: none;">
+                <p>Đã chọn: <strong id="uploadCount">0</strong> ảnh</p>
+                <button id="confirmUploadBtn" class="btn btn-success btn-large">Tải lên</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Welcome Screen -->
+        <div id="welcomeScreen" class="welcome-screen">
+          <div class="welcome-content">
+            <h1>Chào mừng</h1>
+            <p>Chọn một tài khoản từ sidebar để bắt đầu</p>
+            <div class="welcome-features">
+              <div class="feature">
+                <div class="feature-icon"></div>
+                <h3>Nhiều tài khoản</h3>
+                <p>Quản lý nhiều tài khoản Facebook cùng lúc</p>
+              </div>
+              <div class="feature">
+                <div class="feature-icon"></div>
+                <h3>Hàng đợi thông minh</h3>
+                <p>Tự động xử lý các tác vụ theo thứ tự</p>
+              </div>
+              <div class="feature">
+                <div class="feature-icon"></div>
+                <h3>Xử lý song song</h3>
+                <p>Làm việc với nhiều fanpage cùng lúc</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Progress Overlay -->
+    <div id="progressOverlay" class="progress-overlay" style="display: none;">
+      <div class="progress-card">
+        <h3 id="progressTitle">Đang xử lý...</h3>
+        <div class="progress-bar">
+          <div id="progressBar" class="progress-fill"></div>
+        </div>
+        <p id="progressText">Vui lòng đợi...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

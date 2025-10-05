@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+Thumbs.db
+*.exe
+*.msi
+package-lock.json
+yarn.lock
+.env
+
+
