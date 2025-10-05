@@ -74,20 +74,6 @@
           <div id="accountsList" class="accounts-list"></div>
         </div>
 
-        <div class="queue-status">
-          <h4>Hàng đợi</h4>
-          <div id="queueInfo" class="queue-info">
-            <div class="queue-item">
-              <span>Đang chạy:</span>
-              <strong id="currentTaskCount">0</strong>
-            </div>
-            <div class="queue-item">
-              <span>Chờ xử lý:</span>
-              <strong id="pendingTaskCount">0</strong>
-            </div>
-          </div>
-          <div id="currentTaskDisplay" class="current-task"></div>
-        </div>
       </aside>
 
       <!-- Main Content -->
@@ -147,8 +133,8 @@
               <div id="uploadGrid" class="upload-grid"></div>
 
               <div id="uploadActions" class="dialog-actions" style="display: none;">
-                <p>Đã chọn: <strong id="uploadCount">0</strong> ảnh</p>
-                <button id="confirmUploadBtn" class="btn btn-success btn-large">Tải lên</button>
+                <p>Đã chọn: <strong id="uploadCount">0</strong> ảnh cho <strong id="uploadFanpageCount">0</strong> fanpage</p>
+                <button id="confirmUploadBtn" class="btn btn-success btn-large">Tải lên ngay</button>
               </div>
             </div>
           </div>
@@ -179,6 +165,49 @@
           </div>
         </div>
       </main>
+
+      <!-- Queue Panel (Right Side) -->
+      <aside class="queue-panel">
+        <div class="queue-header">
+          <h3>Hàng đợi & Lịch sử</h3>
+        </div>
+
+        <!-- Queue Info -->
+        <div class="queue-summary">
+          <div class="queue-stat">
+            <span class="stat-label">Đang chạy</span>
+            <span id="currentTaskCount" class="stat-value">0</span>
+          </div>
+          <div class="queue-stat">
+            <span class="stat-label">Chờ xử lý</span>
+            <span id="pendingTaskCount" class="stat-value">0</span>
+          </div>
+        </div>
+
+        <!-- Current Task -->
+        <div class="queue-section">
+          <h4>Đang thực hiện</h4>
+          <div id="currentTaskDisplay" class="current-task-display">
+            <p class="empty-state">Không có tác vụ nào</p>
+          </div>
+        </div>
+
+        <!-- Upcoming Tasks -->
+        <div class="queue-section">
+          <h4>Tiếp theo</h4>
+          <div id="upcomingTasks" class="upcoming-tasks">
+            <p class="empty-state">Không có tác vụ nào</p>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="queue-section">
+          <h4>Lịch sử</h4>
+          <div id="taskHistory" class="task-history">
+            <p class="empty-state">Chưa có lịch sử</p>
+          </div>
+        </div>
+      </aside>
     </div>
 
     <!-- Progress Overlay -->

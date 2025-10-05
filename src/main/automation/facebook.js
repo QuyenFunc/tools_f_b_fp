@@ -262,138 +262,101 @@ class FacebookAutomation {
 
   async getUserName() {
     try {
-      // Đảm bảo đang ở trang chủ trước khi lấy tên (tránh đang ở fanpage)
-      try {
-        await this.page.goto('https://www.facebook.com/', { 
-          waitUntil: 'domcontentloaded',
-          timeout: 10000 
-        });
-      } catch (_) {}
-
-      // Đợi trang load xong
-      await this.page.waitForTimeout(2000);
+      // PHƯƠNG PHÁP DUY NHẤT: Lấy từ profile page
+      this.log('Dang lay ten nguoi dung tu profile...', 'info');
       
-      // Thử nhiều cách để lấy tên người dùng
-      const name = await this.page.evaluate(() => {
-        const DISALLOWED = [
-          'Công cụ chuyên nghiệp', 'Professional tools', 'Công cụ', 'Trang chủ', 'Home',
-          'Watch', 'Marketplace', 'Reels', 'Video', 'Bạn bè', 'Friends', 'Groups', 'Pages',
-          'Facebook', 'Tạo', 'Create'
-        ].map(s => s.toLowerCase());
-        const isValidCandidate = (text) => {
-          if (!text) return false;
-          const t = text.trim();
-          if (t.length < 3 || t.length > 50) return false;
-          if (DISALLOWED.includes(t.toLowerCase())) return false;
-          return true;
-        };
-        // Phương pháp 1: Từ nút menu tài khoản (chính xác nhất)
-        const accountButton = document.querySelector('[aria-label^="Tài khoản của"], [aria-label^="Account of"]');
-        if (accountButton) {
-          const ariaLabel = accountButton.getAttribute('aria-label');
-          // "Tài khoản của Tên Người Dùng" -> lấy "Tên Người Dùng"
-          const match = ariaLabel.match(/của\s+(.+)$/i) || ariaLabel.match(/of\s+(.+)$/i);
-          if (match && match[1] && isValidCandidate(match[1])) {
-            return match[1].trim();
-          }
-        }
+      try {
+        // Đi đến profile
+        await this.page.goto('https://www.facebook.com/me', { 
+          waitUntil: 'domcontentloaded',
+          timeout: 15000 
+        });
+        await this.page.waitForTimeout(3000); // Đợi lâu hơn
         
-        // Phương pháp 2: Từ link profile trong menu
-        const profileLink = document.querySelector('a[href*="/profile.php?id="], a[href*="facebook.com/"][href*="/profile"]');
-        if (profileLink) {
-          // Tìm thẻ strong hoặc span bên trong chứa tên
-          const strongTag = profileLink.querySelector('strong');
-          if (strongTag && isValidCandidate(strongTag.textContent)) {
-            return strongTag.textContent.trim();
-          }
-          
-          const spanTag = profileLink.querySelector('span[dir="auto"]');
-          if (spanTag && isValidCandidate(spanTag.textContent)) {
-            const text = spanTag.textContent.trim();
-            // Chỉ lấy nếu không phải là menu item
-            if (!['Trang chủ', 'Home', 'Video', 'Watch', 'Marketplace'].includes(text)) {
+        const profileName = await this.page.evaluate(() => {
+          // CÁCH 1: Lấy từ thẻ h1 đầu tiên (tên profile)
+          const h1Elements = document.querySelectorAll('h1');
+          for (const h1 of h1Elements) {
+            const text = h1.textContent.trim();
+            
+            // Bỏ qua text rỗng hoặc quá ngắn
+            if (!text || text.length < 2) continue;
+            
+            // Bỏ qua text chung chung
+            const forbidden = [
+              'facebook', 'profile', 'trang cá nhân', 'home', 'đoạn chat',
+              'chats', 'messages', 'messenger', 'bạn bè', 'friends', 'video',
+              'watch', 'marketplace', 'groups', 'pages', 'notifications'
+            ];
+            
+            const textLower = text.toLowerCase();
+            const isForbidden = forbidden.some(f => textLower.includes(f));
+            
+            if (!isForbidden && text.length >= 2 && text.length <= 100) {
+              console.log(`✓ Tìm thấy tên từ h1: ${text}`);
               return text;
             }
           }
-        }
-        
-        // Phương pháp 3: Từ ảnh avatar (alt có thể chứa tên)
-        const avatarImg = document.querySelector('img[alt*="của"], img[alt*="of"], img[alt*="profile" i]');
-        if (avatarImg && avatarImg.alt && isValidCandidate(avatarImg.alt)) {
-          const alt = avatarImg.alt.trim();
-          const m = alt.match(/của\s+(.+)$/i) || alt.match(/of\s+(.+)$/i);
-          if (m && m[1] && isValidCandidate(m[1])) return m[1].trim();
-        }
-
-        // Phương pháp 4: Từ document title khi ở trang chủ
-        if (document.title && !document.title.startsWith('Facebook')) {
-          const titleParts = document.title.split('|');
-          if (titleParts.length > 0) {
+          
+          // CÁCH 2: Lấy từ document.title
+          if (document.title) {
+            const titleParts = document.title.split('|');
             const possibleName = titleParts[0].trim();
-            if (isValidCandidate(possibleName)) {
+            
+            if (possibleName && 
+                !possibleName.toLowerCase().startsWith('facebook') &&
+                possibleName.length >= 2 &&
+                possibleName.length <= 100) {
+              console.log(`✓ Tìm thấy tên từ title: ${possibleName}`);
               return possibleName;
             }
           }
-        }
-        
-        // Phương pháp 5: Từ meta tag
-        const metaTag = document.querySelector('meta[property="og:title"]');
-        if (metaTag) {
-          const content = metaTag.getAttribute('content');
-          if (content && !content.startsWith('Facebook') && isValidCandidate(content)) {
-            return content.trim();
-          }
-        }
-        
-        // Phương pháp 6: Đi đến trang profile để lấy tên
-        return null;
-      });
-      
-      if (name) {
-        this.log(`Lay duoc ten: ${name}`, 'info');
-        return name;
-      }
-      
-      // Nếu không lấy được hoặc giá trị có vẻ chung chung, đi đến trang profile
-      this.log('Dang chuyen den trang ca nhan de lay ten...', 'info');
-      const currentUrl = this.page.url();
-      
-      try {
-        await this.page.goto('https://www.facebook.com/me', { 
-          waitUntil: 'domcontentloaded',
-          timeout: 10000 
-        });
-        await this.page.waitForTimeout(2000);
-        
-        const profileName = await this.page.evaluate(() => {
-          // Lấy từ thẻ h1 trong profile
-          const h1 = document.querySelector('h1');
-          if (h1 && h1.textContent.trim()) {
-            return h1.textContent.trim();
-          }
           
-          // Lấy từ title
-          if (document.title) {
-            const parts = document.title.split('|');
-            if (parts[0] && parts[0].trim()) {
-              return parts[0].trim();
+          // CÁCH 3: Lấy từ meta og:title
+          const metaTitle = document.querySelector('meta[property="og:title"]');
+          if (metaTitle) {
+            const content = metaTitle.getAttribute('content');
+            if (content && 
+                !content.toLowerCase().startsWith('facebook') &&
+                content.length >= 2 &&
+                content.length <= 100) {
+              console.log(`✓ Tìm thấy tên từ meta: ${content}`);
+              return content;
             }
           }
           
+          console.error('✗ Không tìm thấy tên');
           return null;
         });
         
-        // Quay lại trang cũ
-        await this.page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
-        
         if (profileName) {
-          this.log(`Lay duoc ten tu profile: ${profileName}`, 'info');
+          this.log(`✓ Lay duoc ten: ${profileName}`, 'success');
+          
+          // Quay về trang chủ
+          await this.page.goto('https://www.facebook.com/', { 
+            waitUntil: 'domcontentloaded',
+            timeout: 10000 
+          });
+          
           return profileName;
         }
       } catch (error) {
-        this.log(`Loi khi lay ten tu profile: ${error.message}`, 'error');
+        this.log(`Loi lay ten tu profile: ${error.message}`, 'error');
       }
       
+      // Quay về trang chủ nếu chưa quay
+      try {
+        const currentUrl = this.page.url();
+        if (!currentUrl.includes('facebook.com/') || currentUrl.includes('/me')) {
+          await this.page.goto('https://www.facebook.com/', { 
+            waitUntil: 'domcontentloaded',
+            timeout: 10000 
+          });
+        }
+      } catch (_) {}
+      
+      // Không lấy được tên
+      this.log('⚠️ Khong lay duoc ten nguoi dung - dung ten mac dinh', 'warning');
       return 'Người dùng';
     } catch (error) {
       this.log(`Loi lay ten nguoi dung: ${error.message}`, 'error');

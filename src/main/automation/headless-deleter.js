@@ -43,11 +43,14 @@ class HeadlessDeleter {
       
       let deletedCount = 0;
       let failedCount = 0;
+      let consecutiveFailures = 0; // Đếm số lần fail liên tiếp
       let noMorePhotos = false;
+      const MAX_CONSECUTIVE_FAILURES = 3; // Dừng sau 3 lần fail liên tiếp
+      const MAX_TOTAL_FAILURES = 10; // Dừng sau 10 lần fail tổng
       
       // Lặp xóa cho đến khi không còn ảnh
-      while (!noMorePhotos) {
-        this.log(`[Browser ${browserIndex}] Deleted: ${deletedCount}, Failed: ${failedCount}`, 'info');
+      while (!noMorePhotos && consecutiveFailures < MAX_CONSECUTIVE_FAILURES && failedCount < MAX_TOTAL_FAILURES) {
+        this.log(`[Browser ${browserIndex}] Deleted: ${deletedCount}, Failed: ${failedCount} (Consecutive: ${consecutiveFailures})`, 'info');
         
         try {
           // Tìm ảnh đầu tiên trên trang
@@ -85,104 +88,235 @@ class HeadlessDeleter {
           // Đợi ảnh mở popup
           await page.waitForTimeout(2000);
           
-          // Click nút menu (3 chấm)
-          const menuClicked = await page.evaluate(() => {
+          // Click icon cây bút (Edit) - Đa ngôn ngữ
+          const editClicked = await page.evaluate(() => {
+            // Tìm tất cả buttons
             const buttons = document.querySelectorAll('div[role="button"], i[data-visualcompletion="css-img"]');
             
             for (const btn of buttons) {
               const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
               
-              if (ariaLabel.includes('more') || ariaLabel.includes('hành động') || ariaLabel.includes('actions')) {
+              // Tìm nút "Chỉnh sửa" / "Edit" (icon cây bút)
+              if (ariaLabel.includes('chỉnh sửa') || 
+                  ariaLabel.includes('edit') ||
+                  ariaLabel.includes('hành động') || 
+                  ariaLabel.includes('actions') ||
+                  ariaLabel.includes('more')) {
+                
                 const clickable = btn.closest('div[role="button"]') || btn;
-                clickable.click();
-                console.log('✓ Đã click menu');
-                return true;
+                const rect = clickable.getBoundingClientRect();
+                
+                if (rect.width > 0 && rect.height > 0) {
+                  clickable.click();
+                  console.log('✓ Đã click icon cây bút/menu');
+                  return true;
+                }
               }
             }
             
             return false;
           });
           
-          if (!menuClicked) {
-            this.log(`[Browser ${browserIndex}] Khong tim thay menu`, 'warning');
+          if (!editClicked) {
+            this.log(`[Browser ${browserIndex}] Khong tim thay icon cay but`, 'warning');
+            
+            // Thử Escape nhiều lần
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(300);
             await page.keyboard.press('Escape');
             await page.waitForTimeout(500);
+            
+            // Quay lại trang photos
+            await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            await page.waitForTimeout(2000);
+            
             failedCount++;
+            consecutiveFailures++;
             continue;
           }
           
-          await page.waitForTimeout(1000);
+          // Reset consecutive failures khi tìm thấy button
+          consecutiveFailures = 0;
           
-          // Click "Xóa ảnh"
+          await page.waitForTimeout(1200);
+          
+          // Click "Xóa ảnh" / "Delete photo" - Đa ngôn ngữ
           const deleteClicked = await page.evaluate(() => {
-            const items = document.querySelectorAll('div[role="menuitem"], span');
+            const items = document.querySelectorAll('div[role="menuitem"], span, div[tabindex="0"]');
             
             for (const item of items) {
-              const text = item.textContent.trim();
+              const text = item.textContent.trim().toLowerCase();
               
-              if (text.includes('Xóa ảnh') || text.includes('Delete photo')) {
-                const clickable = item.closest('div[role="menuitem"]') || item;
+              // Kiểm tra cả tiếng Việt & English
+              if (text.includes('xóa ảnh') || 
+                  text.includes('delete photo') ||
+                  text.includes('xoá ảnh')) {
+                
+                const clickable = item.closest('div[role="menuitem"]') || 
+                                item.closest('div[tabindex="0"]') || 
+                                item;
                 clickable.click();
                 console.log('✓ Đã click "Xóa ảnh"');
                 return true;
               }
             }
             
+            console.error('✗ Không tìm thấy "Xóa ảnh"');
             return false;
           });
           
           if (!deleteClicked) {
             this.log(`[Browser ${browserIndex}] Khong tim thay "Xoa anh"`, 'warning');
+            
+            // Thử Escape nhiều lần
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(300);
             await page.keyboard.press('Escape');
             await page.waitForTimeout(500);
+            
+            // Quay lại trang photos
+            await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            await page.waitForTimeout(2000);
+            
             failedCount++;
+            consecutiveFailures++;
             continue;
           }
           
-          await page.waitForTimeout(1000);
+          await page.waitForTimeout(1500);
           
-          // Xác nhận xóa
+          // Xác nhận xóa - ĐƠN GIẢN HÓA: Tìm nút "Xóa" trong dialog
           const confirmed = await page.evaluate(() => {
-            const buttons = document.querySelectorAll('div[role="button"], button');
+            // Tìm tất cả buttons có text "Xóa"
+            const allButtons = Array.from(document.querySelectorAll('div[role="button"], button'));
             
-            for (const btn of buttons) {
+            console.log(`Tìm thấy ${allButtons.length} buttons`);
+            
+            // Lọc các nút "Xóa" visible
+            const deleteButtons = allButtons.filter(btn => {
               const text = btn.textContent.trim();
+              const rect = btn.getBoundingClientRect();
               
-              if (text === 'Xóa' || text === 'Delete') {
+              // Chỉ lấy nút có text CHÍNH XÁC là "Xóa" và visible
+              return (text === 'Xóa' || text === 'Delete' || text === 'Xoá') && 
+                     rect.width > 0 && rect.height > 0;
+            });
+            
+            console.log(`Tìm thấy ${deleteButtons.length} nút "Xóa" visible`);
+            
+            if (deleteButtons.length === 0) {
+              console.error('✗ Không tìm thấy nút "Xóa"');
+              return false;
+            }
+            
+            // Nếu chỉ có 1 nút "Xóa" → Click luôn
+            if (deleteButtons.length === 1) {
+              console.log('✓ Tìm thấy 1 nút "Xóa" duy nhất');
+              deleteButtons[0].click();
+              return true;
+            }
+            
+            // Nếu có nhiều nút "Xóa" → Tìm nút có màu nền (primary button)
+            console.log('Có nhiều nút "Xóa", tìm nút có màu...');
+            
+            for (const btn of deleteButtons) {
+              const style = window.getComputedStyle(btn);
+              const bgColor = style.backgroundColor;
+              
+              console.log(`Nút "Xóa": bgColor=${bgColor}`);
+              
+              // Tìm nút có màu nền (không phải transparent/white)
+              if (bgColor && 
+                  bgColor !== 'rgba(0, 0, 0, 0)' && 
+                  bgColor !== 'transparent' &&
+                  bgColor !== 'rgb(255, 255, 255)' &&
+                  bgColor !== 'rgba(255, 255, 255, 1)') {
+                
+                console.log(`✓ Tìm thấy nút "Xóa" có màu: ${bgColor}`);
+                btn.scrollIntoView({ block: 'center' });
                 btn.click();
-                console.log('✓ Đã xác nhận xóa');
                 return true;
               }
             }
             
-            return false;
+            // Fallback: Click nút "Xóa" cuối cùng
+            console.log('Fallback: Click nút "Xóa" cuối cùng');
+            const lastBtn = deleteButtons[deleteButtons.length - 1];
+            lastBtn.scrollIntoView({ block: 'center' });
+            lastBtn.click();
+            return true;
           });
           
           if (confirmed) {
             deletedCount++;
+            consecutiveFailures = 0; // Reset khi xóa thành công
             this.log(`[Browser ${browserIndex}] ✓ Xoa thanh cong: ${deletedCount}`, 'success');
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(2000);
             
             // Quay lại trang ảnh
             await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(2500);
           } else {
-            this.log(`[Browser ${browserIndex}] Khong xac nhan duoc`, 'warning');
-            await page.keyboard.press('Escape');
-            await page.waitForTimeout(500);
-            failedCount++;
+            this.log(`[Browser ${browserIndex}] ⚠️ Khong tim thay nut xac nhan`, 'warning');
+            
+            // Thử phím tắt Enter
+            this.log(`[Browser ${browserIndex}] Thu phim Enter...`, 'info');
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(2000);
+            
+            // Kiểm tra xem có back về trang photos không
+            const currentUrl = page.url();
+            if (currentUrl.includes('photos')) {
+              deletedCount++;
+              consecutiveFailures = 0; // Reset
+              this.log(`[Browser ${browserIndex}] ✓ Xoa thanh cong (Enter)`, 'success');
+              await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+              await page.waitForTimeout(2500);
+            } else {
+              // Thất bại - Escape nhiều lần và quay lại
+              this.log(`[Browser ${browserIndex}] That bai, escape va quay lai...`, 'warning');
+              await page.keyboard.press('Escape');
+              await page.waitForTimeout(300);
+              await page.keyboard.press('Escape');
+              await page.waitForTimeout(300);
+              await page.keyboard.press('Escape');
+              await page.waitForTimeout(500);
+              
+              // Force quay lại trang photos
+              await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+              await page.waitForTimeout(2000);
+              
+              failedCount++;
+              consecutiveFailures++;
+            }
           }
           
         } catch (error) {
           this.log(`[Browser ${browserIndex}] Loi: ${error.message}`, 'error');
           failedCount++;
+          consecutiveFailures++;
           
-          // Thử escape và quay lại
+          // Escape nhiều lần và force reload
+          this.log(`[Browser ${browserIndex}] Recovery mode...`, 'warning');
+          await page.keyboard.press('Escape').catch(() => {});
+          await page.waitForTimeout(300);
+          await page.keyboard.press('Escape').catch(() => {});
+          await page.waitForTimeout(300);
           await page.keyboard.press('Escape').catch(() => {});
           await page.waitForTimeout(500);
+          
+          // Force reload trang photos
           await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(2500);
         }
+      }
+      
+      // Log kết quả cuối
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        this.log(`[Browser ${browserIndex}] ⚠️ Dung do qua nhieu loi lien tiep (${consecutiveFailures})`, 'warning');
+      }
+      if (failedCount >= MAX_TOTAL_FAILURES) {
+        this.log(`[Browser ${browserIndex}] ⚠️ Dung do qua nhieu loi tong (${failedCount})`, 'warning');
       }
       
       return {
@@ -537,12 +671,21 @@ class HeadlessDeleter {
     
     this.browsers.push(browser);
     
-    const context = await browser.newContext({
-      ...this.sessionState,
+    // Tạo context với session state (ĐÚNG CÁCH)
+    const contextOptions = {
       viewport: { width: 1920, height: 1080 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    });
+    };
     
+    // QUAN TRỌNG: storageState chứa cookies + localStorage
+    if (this.sessionState && this.sessionState.cookies) {
+      contextOptions.storageState = this.sessionState;
+      this.log(`✓ Restore session: ${this.sessionState.cookies.length} cookies`, 'info');
+    } else {
+      this.log('⚠️ Khong co session state - co the phai dang nhap!', 'warning');
+    }
+    
+    const context = await browser.newContext(contextOptions);
     const page = await context.newPage();
     
     // Xóa tất cả ảnh

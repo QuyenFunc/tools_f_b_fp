@@ -15,10 +15,11 @@ let taskQueue;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1000,
-    minHeight: 700,
+    width: 1920,
+    height: 1080,
+    minWidth: 1200,
+    minHeight: 800,
+    fullscreen: false, // Có thể bật F11 để fullscreen
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -182,26 +183,17 @@ ipcMain.handle('select-fanpage', async (event, { accountId, pageId, pageInfo }) 
   }
 });
 
-// Photo operations
+// Photo operations  
 ipcMain.handle('scan-photos', async (event, { accountId, fanpageId, options }) => {
   try {
-    const automation = accountManager.getAutomation(accountId);
-    if (!automation) {
-      return {
-        success: false,
-        error: 'Tài khoản không tồn tại'
-      };
-    }
-
-    // Switch to fanpage first if needed
-    if (fanpageId && automation.currentPageId !== fanpageId) {
-      await automation.selectFanpage(fanpageId);
-    }
-
-    const photos = await automation.scanPhotos(options);
+    // KHÔNG CẦN SCAN NỮA - Chỉ trả về message
+    // Vì logic xóa mới không cần biết số ảnh trước
+    console.log(`⚠️ scan-photos deprecated - không cần scan nữa`);
+    
     return {
       success: true,
-      photos
+      photos: [],
+      message: 'Không cần scan - xóa trực tiếp tất cả ảnh'
     };
   } catch (error) {
     return {
@@ -257,23 +249,27 @@ ipcMain.handle('delete-photos', async (event, { accountId, fanpageId, photoIds, 
       fanpageBrowser = fanpageManager.getFanpageBrowser(fanpageId);
     }
 
-    // Sử dụng session từ browser riêng của fanpage
+    // SỬ DỤNG page của fanpage browser đã có sẵn
     const HeadlessDeleter = require('./automation/headless-deleter');
     const headlessDeleter = new HeadlessDeleter(mainWindow, 1);
     
-    // Lấy session từ context của fanpage browser
-    const sessionState = await fanpageBrowser.context.storageState();
     const fanpageUrl = fanpageBrowser.pageInfo.url;
     
-    headlessDeleter.setSession(sessionState);
+    // Xóa TẤT CẢ ảnh trên fanpage - DÙNG PAGE CÓ SẴN
+    const result = await headlessDeleter.deleteAllPhotosOnPage(
+      fanpageBrowser.page, 
+      fanpageUrl, 
+      1
+    );
     
-    // Xóa TẤT CẢ ảnh trên fanpage (không cần scan trước)
-    const result = await headlessDeleter.deleteAllPhotosOnFanpage(fanpageUrl);
+    // KHÔNG close browser (để user có thể tiếp tục dùng)
     
-    // Close browser sau khi xong
-    await headlessDeleter.close();
-    
-    return result;
+    return {
+      success: true,
+      deleted: result.deleted,
+      failed: result.failed,
+      total: result.deleted + result.failed
+    };
   } catch (error) {
     return {
       success: false,

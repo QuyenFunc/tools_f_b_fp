@@ -140,9 +140,33 @@ async function loginSavedAccount(accountId, sessionData, switchTo = true) {
     
     renderAccountsList();
     
+    // TỰ ĐỘNG LOAD FANPAGES ngay sau khi login
+    loadFanpagesInBackground(accountId);
+    
     if (switchTo) {
       await switchToAccount(accountId);
     }
+  }
+}
+
+// Load fanpages trong background (không block UI)
+async function loadFanpagesInBackground(accountId) {
+  try {
+    const result = await window.api.getFanpages(accountId);
+    
+    if (result.success && result.pages.length > 0) {
+      const account = state.accounts.get(accountId);
+      if (account) {
+        account.fanpages = result.pages;
+        
+        // Nếu đang xem account này, cập nhật UI
+        if (state.currentAccountId === accountId) {
+          renderFanpages(result.pages);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Lỗi load fanpages:', error);
   }
 }
 
@@ -178,6 +202,10 @@ async function handleLogin(e) {
     
     showAppScreen();
     renderAccountsList();
+    
+    // TỰ ĐỘNG LOAD FANPAGES ngay sau khi login
+    loadFanpagesInBackground(accountId);
+    
     await switchToAccount(accountId);
     
     // Clear form
@@ -417,14 +445,11 @@ async function handleDeleteAllPhotos() {
       fanpageId: fanpage.id,
       fanpageName: fanpage.name,
       execute: async () => {
-        const scanResult = await window.api.scanPhotos(state.currentAccountId, fanpage.id, { maxPhotos: 10000 });
-        
-        if (!scanResult.success || !scanResult.photos || scanResult.photos.length === 0) {
-          return { success: true, deleted: 0, total: 0, message: 'Không có ảnh' };
-        }
-        
-        const photoIds = scanResult.photos.map(p => p.id || p.url);
-        const result = await window.api.deletePhotos(state.currentAccountId, fanpage.id, { photoIds, dryRun: false });
+        // XÓA TẤT CẢ ảnh - KHÔNG CẦN SCAN trước
+        const result = await window.api.deletePhotos(state.currentAccountId, fanpage.id, { 
+          photoIds: [], // Không cần photoIds nữa
+          dryRun: false 
+        });
         
         return result;
       }
@@ -516,6 +541,14 @@ function renderUploadGrid(photos) {
 
 function updateUploadSelection() {
   uploadCount.textContent = state.selectedPhotos.size;
+  
+  // Update fanpage count
+  const account = state.accounts.get(state.currentAccountId);
+  const fanpageCount = account ? account.selectedFanpages.length : 0;
+  const uploadFanpageCount = document.getElementById('uploadFanpageCount');
+  if (uploadFanpageCount) {
+    uploadFanpageCount.textContent = fanpageCount;
+  }
 }
 
 async function handleConfirmUpload() {
@@ -613,25 +646,73 @@ async function processTaskQueue() {
 }
 
 function updateQueueStatus() {
-  const running = state.taskQueue.filter(t => t.status === 'running').length;
-  const pending = state.taskQueue.filter(t => t.status === 'pending').length;
-  const completed = state.taskQueue.filter(t => t.status === 'completed').length;
+  const running = state.taskQueue.filter(t => t.status === 'running');
+  const pending = state.taskQueue.filter(t => t.status === 'pending');
+  const completed = state.taskQueue.filter(t => t.status === 'completed' || t.status === 'failed');
   
-  currentTaskCount.textContent = running;
-  pendingTaskCount.textContent = pending;
+  currentTaskCount.textContent = running.length;
+  pendingTaskCount.textContent = pending.length;
   
-  const currentTask = state.taskQueue.find(t => t.status === 'running');
-  if (currentTask) {
-    const account = state.accounts.get(currentTask.accountId);
-    const accountName = account ? account.userName : 'Unknown';
-    const taskType = currentTask.type === 'delete' ? 'Xóa ảnh' : 'Tải ảnh lên';
-    const fanpageName = currentTask.fanpageName || '';
-    currentTaskDisplay.innerHTML = `${taskType} - ${fanpageName} <small>(${accountName})</small>`;
-  } else if (completed > 0 && pending === 0) {
-    currentTaskDisplay.innerHTML = `✓ Hoàn thành ${completed} tác vụ`;
+  // Current Task Display
+  const currentTaskDisplay = document.getElementById('currentTaskDisplay');
+  if (running.length > 0) {
+    currentTaskDisplay.innerHTML = running.map(task => createTaskCard(task, 'running')).join('');
   } else {
-    currentTaskDisplay.textContent = pending > 0 ? 'Đang chờ...' : 'Không có tác vụ';
+    currentTaskDisplay.innerHTML = '<p class="empty-state">Không có tác vụ nào</p>';
   }
+  
+  // Upcoming Tasks
+  const upcomingTasks = document.getElementById('upcomingTasks');
+  if (pending.length > 0) {
+    upcomingTasks.innerHTML = pending.slice(0, 5).map(task => createTaskCard(task, 'pending')).join('');
+  } else {
+    upcomingTasks.innerHTML = '<p class="empty-state">Không có tác vụ nào</p>';
+  }
+  
+  // Task History
+  const taskHistory = document.getElementById('taskHistory');
+  if (completed.length > 0) {
+    taskHistory.innerHTML = completed.slice(-10).reverse().map(task => createTaskCard(task, task.status)).join('');
+  } else {
+    taskHistory.innerHTML = '<p class="empty-state">Chưa có lịch sử</p>';
+  }
+}
+
+function createTaskCard(task, status) {
+  const account = state.accounts.get(task.accountId);
+  const accountName = account ? account.userName : 'Unknown';
+  const taskType = task.type === 'delete' ? 'Xóa ảnh' : 'Tải ảnh';
+  const fanpageName = task.fanpageName || '';
+  const photoCount = task.photoCount || 0;
+  
+  let statusText = 'Chờ';
+  let statusClass = '';
+  if (status === 'running') {
+    statusText = 'Đang chạy';
+    statusClass = 'status-running';
+  } else if (status === 'completed') {
+    statusText = 'Hoàn thành';
+    statusClass = 'status-completed';
+  } else if (status === 'failed') {
+    statusText = 'Thất bại';
+    statusClass = 'status-failed';
+  }
+  
+  const time = task.startedAt ? new Date(task.startedAt).toLocaleTimeString('vi-VN') : '';
+  
+  return `
+    <div class="task-card task-${task.type}">
+      <div class="task-header">
+        <span class="task-type">${taskType}</span>
+        <span class="task-status ${statusClass}">${statusText}</span>
+      </div>
+      <div class="task-details">
+        <div class="task-fanpage">${fanpageName}</div>
+        <div>${photoCount > 0 ? `${photoCount} ảnh` : ''} • ${accountName}</div>
+        ${time ? `<div class="task-time">${time}</div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 // ==================== PROGRESS ====================
