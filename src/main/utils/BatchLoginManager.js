@@ -332,19 +332,21 @@ class BatchLoginManager {
   }
 
   /**
-   * LOGIN BATCH ACCOUNTS
+   * LOGIN BATCH ACCOUNTS - PARALLEL VERSION
    */
   async loginBatch(batchString, options = {}) {
     const {
       headless = true,
       useProxy = false,
       skipIfHasSession = true,
-      delayBetweenAccounts = [180000, 300000], // 3-5 PHÚT (QUAN TRỌNG!)
+      delayBetweenAccounts = [5000, 10000], // 5-10 GIÂY giữa mỗi lần khởi động browser
       stopOnError = false,
+      maxConcurrent = 3, // Số browser chạy đồng thời (mặc định 3)
+      parallelMode = true, // Bật/tắt chế độ song song
     } = options;
 
     try {
-      this.log('📋 Parsing batch accounts...', 'info');
+      this.log('📋 Đang phân tích danh sách accounts...', 'info');
       
       // Parse batch string
       const parseResult = this.parseBatchString(batchString);
@@ -355,17 +357,17 @@ class BatchLoginManager {
       
       const { accounts, errors, total, valid, invalid } = parseResult;
       
-      this.log(`✅ Parsed ${total} accounts: ${valid} valid, ${invalid} invalid`, 'success');
+      this.log(`✅ Đã phân tích ${total} accounts: ${valid} hợp lệ, ${invalid} không hợp lệ`, 'success');
       
       if (errors.length > 0) {
-        this.log('⚠️ Invalid accounts:', 'warning');
+        this.log('⚠️ Các account không hợp lệ:', 'warning');
         errors.forEach(err => {
-          this.log(`  Line ${err.line}: ${err.error}`, 'warning');
+          this.log(`  Dòng ${err.line}: ${err.error}`, 'warning');
         });
       }
       
       if (accounts.length === 0) {
-        throw new Error('No valid accounts to login');
+        throw new Error('Không có account hợp lệ để đăng nhập');
       }
       
       // Reset counters
@@ -373,47 +375,32 @@ class BatchLoginManager {
       this.successCount = 0;
       this.failedCount = 0;
       
-      // Login each account
-      this.log(`\n🚀 Bắt đầu đăng nhập ${accounts.length} accounts...\n`, 'info');
-      
-      for (let i = 0; i < accounts.length; i++) {
-        const account = accounts[i];
+      // Chế độ SONG SONG
+      if (parallelMode) {
+        this.log(`\n🚀 BẮT ĐẦU ĐĂNG NHẬP SONG SONG ${accounts.length} ACCOUNTS`, 'info');
+        this.log(`⚡ Số browser chạy đồng thời: ${maxConcurrent}`, 'info');
+        this.log(`⏱️ Delay giữa mỗi browser: ${delayBetweenAccounts[0]/1000}-${delayBetweenAccounts[1]/1000}s\n`, 'info');
         
-        this.progress(i + 1, accounts.length, `Đang xử lý account ${i + 1}/${accounts.length}`);
-        
-        this.log(`\n${'='.repeat(60)}`, 'info');
-        this.log(`📱 ACCOUNT ${i + 1}/${accounts.length}`, 'info');
-        this.log(`${'='.repeat(60)}`, 'info');
-        
-        const result = await this.loginSingleAccount(account, {
+        await this.loginBatchParallel(accounts, {
           headless,
           useProxy,
           skipIfHasSession,
+          delayBetweenAccounts,
+          stopOnError,
+          maxConcurrent,
         });
+      } 
+      // Chế độ TUẦN TỰ (cũ)
+      else {
+        this.log(`\n🚀 BẮT ĐẦU ĐĂNG NHẬP TUẦN TỰ ${accounts.length} ACCOUNTS\n`, 'info');
         
-        this.results.push(result);
-        
-        if (result.success) {
-          this.successCount++;
-          this.log(`\n✅ Thành công: ${result.email} ${result.skipped ? '(skipped - có session)' : ''}`, 'success');
-        } else {
-          this.failedCount++;
-          this.log(`\n❌ Thất bại: ${result.email} - ${result.error}`, 'error');
-          
-          if (stopOnError) {
-            this.log('⚠️ Dừng batch vì stopOnError = true', 'warning');
-            break;
-          }
-        }
-        
-        // Delay between accounts (trừ account cuối)
-        if (i < accounts.length - 1) {
-          const delay = delayBetweenAccounts[0] + 
-                       Math.random() * (delayBetweenAccounts[1] - delayBetweenAccounts[0]);
-          
-          this.log(`\n⏳ Chờ ${Math.round(delay / 1000)}s trước khi đăng nhập account tiếp theo...`, 'info');
-          await this.sleep(delay);
-        }
+        await this.loginBatchSequential(accounts, {
+          headless,
+          useProxy,
+          skipIfHasSession,
+          delayBetweenAccounts,
+          stopOnError,
+        });
       }
       
       // Summary
@@ -438,6 +425,172 @@ class BatchLoginManager {
         error: error.message,
         results: this.results,
       };
+    }
+  }
+
+  /**
+   * LOGIN BATCH PARALLEL - Chạy nhiều browser đồng thời
+   */
+  async loginBatchParallel(accounts, options) {
+    const {
+      headless,
+      useProxy,
+      skipIfHasSession,
+      delayBetweenAccounts,
+      stopOnError,
+      maxConcurrent,
+    } = options;
+
+    const runningTasks = new Map(); // Track các task đang chạy
+    let currentIndex = 0;
+    let completedCount = 0;
+
+    const startNextLogin = async () => {
+      if (currentIndex >= accounts.length) {
+        return;
+      }
+
+      const index = currentIndex++;
+      const account = accounts[index];
+      
+      this.log(`\n${'='.repeat(60)}`, 'info');
+      this.log(`📱 [Browser ${index + 1}/${accounts.length}] Đang khởi động...`, 'info');
+      this.log(`   Email: ${account.email}`, 'info');
+      this.log(`   ID: ${account.accountId}`, 'info');
+      this.log(`${'='.repeat(60)}`, 'info');
+      
+      const taskPromise = (async () => {
+        try {
+          const result = await this.loginSingleAccount(account, {
+            headless,
+            useProxy,
+            skipIfHasSession,
+          });
+          
+          this.results.push(result);
+          
+          if (result.success) {
+            this.successCount++;
+            this.log(`\n✅ [Browser ${index + 1}] THÀNH CÔNG: ${result.email} ${result.skipped ? '(đã có session)' : ''}`, 'success');
+          } else {
+            this.failedCount++;
+            this.log(`\n❌ [Browser ${index + 1}] THẤT BẠI: ${result.email} - ${result.error}`, 'error');
+            
+            if (stopOnError) {
+              this.log('⚠️ Dừng batch vì stopOnError = true', 'warning');
+              currentIndex = accounts.length; // Stop launching new tasks
+            }
+          }
+          
+          completedCount++;
+          this.progress(completedCount, accounts.length, `Hoàn thành ${completedCount}/${accounts.length} accounts`);
+          
+        } catch (error) {
+          this.failedCount++;
+          this.log(`\n❌ [Browser ${index + 1}] LỖI: ${account.email} - ${error.message}`, 'error');
+          
+          this.results.push({
+            success: false,
+            accountId: account.accountId,
+            email: account.email,
+            error: error.message,
+          });
+          
+          completedCount++;
+          this.progress(completedCount, accounts.length, `Hoàn thành ${completedCount}/${accounts.length} accounts`);
+        } finally {
+          runningTasks.delete(index);
+          
+          // Thông báo số browser đang chạy
+          this.log(`📊 Đang chạy: ${runningTasks.size} browser | Hoàn thành: ${completedCount}/${accounts.length}`, 'info');
+          
+          // Start next task if available
+          if (currentIndex < accounts.length && (!stopOnError || this.failedCount === 0)) {
+            // Random delay before starting next
+            const delay = delayBetweenAccounts[0] + 
+                         Math.random() * (delayBetweenAccounts[1] - delayBetweenAccounts[0]);
+            
+            this.log(`⏳ Chờ ${Math.round(delay / 1000)}s trước khi khởi động browser tiếp theo...`, 'info');
+            await this.sleep(delay);
+            
+            startNextLogin();
+          }
+        }
+      })();
+      
+      runningTasks.set(index, taskPromise);
+    };
+
+    // Launch initial batch
+    this.log(`🚀 Khởi động ${Math.min(maxConcurrent, accounts.length)} browser đầu tiên...`, 'info');
+    
+    for (let i = 0; i < Math.min(maxConcurrent, accounts.length); i++) {
+      await startNextLogin();
+      
+      // Delay between initial launches
+      if (i < Math.min(maxConcurrent, accounts.length) - 1) {
+        const delay = delayBetweenAccounts[0] + 
+                     Math.random() * (delayBetweenAccounts[1] - delayBetweenAccounts[0]);
+        await this.sleep(delay);
+      }
+    }
+
+    // Wait for all tasks to complete
+    this.log('\n⏳ Đang chờ tất cả browser hoàn thành...', 'info');
+    await Promise.all(Array.from(runningTasks.values()));
+    this.log('✅ Tất cả browser đã hoàn thành!', 'success');
+  }
+
+  /**
+   * LOGIN BATCH SEQUENTIAL - Chạy tuần tự (cũ)
+   */
+  async loginBatchSequential(accounts, options) {
+    const {
+      headless,
+      useProxy,
+      skipIfHasSession,
+      delayBetweenAccounts,
+      stopOnError,
+    } = options;
+
+    for (let i = 0; i < accounts.length; i++) {
+      const account = accounts[i];
+      
+      this.progress(i + 1, accounts.length, `Đang xử lý account ${i + 1}/${accounts.length}`);
+      
+      this.log(`\n${'='.repeat(60)}`, 'info');
+      this.log(`📱 ACCOUNT ${i + 1}/${accounts.length}`, 'info');
+      this.log(`${'='.repeat(60)}`, 'info');
+      
+      const result = await this.loginSingleAccount(account, {
+        headless,
+        useProxy,
+        skipIfHasSession,
+      });
+      
+      this.results.push(result);
+      
+      if (result.success) {
+        this.successCount++;
+        this.log(`\n✅ Thành công: ${result.email} ${result.skipped ? '(skipped - có session)' : ''}`, 'success');
+      } else {
+        this.failedCount++;
+        this.log(`\n❌ Thất bại: ${result.email} - ${result.error}`, 'error');
+        
+        if (stopOnError) {
+          this.log('⚠️ Dừng batch vì stopOnError = true', 'warning');
+          break;
+        }
+      }
+      
+      // Delay between accounts (trừ account cuối)
+      if (i < accounts.length - 1) {
+        const delay = delayBetweenAccounts[0] + 
+                     Math.random() * (delayBetweenAccounts[1] - delayBetweenAccounts[0]);
+        
+        this.log(`\n⏳ Chờ ${Math.round(delay / 1000)}s trước khi đăng nhập account tiếp theo...`, 'info');
+        await this.sleep(delay);
+      }
     }
   }
 

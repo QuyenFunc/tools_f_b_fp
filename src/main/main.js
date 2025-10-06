@@ -220,17 +220,21 @@ ipcMain.handle('parse-accounts-text', async (event, text) => {
   }
 });
 
-// Import multiple accounts with 2FA
+// Import multiple accounts with 2FA - PARALLEL VERSION
 ipcMain.handle('import-accounts-with-2fa', async (event, accounts) => {
   try {
     const FacebookWith2FA = require('./automation/FacebookWith2FA');
     const FacebookAutomation = require('./automation/facebook');
     const path = require('path');
     const os = require('os');
-    const results = [];
     
-    for (const account of accounts) {
+    console.log(`🚀 Bắt đầu đăng nhập SONG SONG ${accounts.length} tài khoản...`);
+    
+    // ĐĂNG NHẬP SONG SONG TẤT CẢ
+    const loginPromises = accounts.map(async (account, index) => {
       try {
+        console.log(`[${index + 1}/${accounts.length}] Đăng nhập ${account.email}...`);
+        
         const accountId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
         const automation = new FacebookWith2FA(mainWindow);
         
@@ -244,6 +248,8 @@ ipcMain.handle('import-accounts-with-2fa', async (event, accounts) => {
         }, true, userDataDir); // Headless + persistent
         
         if (result.success) {
+          console.log(`✅ [${index + 1}/${accounts.length}] Thành công: ${account.email}`);
+          
           // Chuyển sang FacebookAutomation thường
           const normalAutomation = new FacebookAutomation(mainWindow);
           normalAutomation.browser = automation.browser;
@@ -252,37 +258,46 @@ ipcMain.handle('import-accounts-with-2fa', async (event, accounts) => {
           
           await accountManager.addAccount(accountId, result.userName, result.sessionData, normalAutomation);
           
-          results.push({
+          return {
             success: true,
             email: account.email,
             userName: result.userName,
             accountId
-          });
+          };
         } else {
-          results.push({
+          console.log(`❌ [${index + 1}/${accounts.length}] Thất bại: ${account.email} - ${result.error}`);
+          
+          return {
             success: false,
             email: account.email,
             error: result.error
-          });
+          };
         }
-        
-        // Đợi 3 giây giữa các account để tránh spam
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
       } catch (error) {
-        results.push({
+        console.log(`❌ [${index + 1}/${accounts.length}] Exception: ${account.email} - ${error.message}`);
+        
+        return {
           success: false,
           email: account.email,
           error: error.message
-        });
+        };
       }
-    }
+    });
+    
+    // Đợi TẤT CẢ hoàn thành
+    const results = await Promise.all(loginPromises);
+    
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+    
+    console.log(`✅ Hoàn tất: ${successCount} thành công, ${failedCount} thất bại`);
     
     return {
       success: true,
       results
     };
   } catch (error) {
+    console.error('❌ Lỗi import accounts:', error);
     return {
       success: false,
       error: error.message
@@ -290,9 +305,9 @@ ipcMain.handle('import-accounts-with-2fa', async (event, accounts) => {
   }
 });
 
-ipcMain.handle('login-account-with-session', async (event, { accountId, sessionData }) => {
+ipcMain.handle('login-account-with-session', async (event, { accountId, sessionData, options }) => {
   try {
-    const result = await accountManager.loginAccountWithSession(accountId, sessionData);
+    const result = await accountManager.loginAccountWithSession(accountId, sessionData, options);
     return result;
   } catch (error) {
     return {

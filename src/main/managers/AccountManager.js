@@ -85,12 +85,12 @@ class AccountManager {
   }
 
   // Đăng nhập lại account từ session
-  async loginAccountWithSession(accountId, sessionData) {
+  async loginAccountWithSession(accountId, sessionData, options = {}) {
     try {
       const automation = new FacebookAutomation(this.mainWindow);
-      // Login with headless mode (browser hidden)
-      // DEBUG: Tạm thời hiển thị browser
-      const result = await automation.loginWithSession(sessionData, false);
+      // Login with headless mode (browser hidden) - ALWAYS TRUE
+      const headless = options.headless !== false; // Default true
+      const result = await automation.loginWithSession(sessionData, headless);
       
       if (result.success) {
         const fanpageManager = new FanpageManager(this.mainWindow);

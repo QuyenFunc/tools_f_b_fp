@@ -98,10 +98,10 @@ class FacebookWith2FA {
         timeout: 15000 
       });
       
-      // HUMAN BEHAVIOR: Đọc trang trước khi login
-      await HumanBehavior.humanDelay(3000, 5000);
+      // HUMAN BEHAVIOR: Đọc trang trước khi login (tốc độ cao)
+      await HumanBehavior.humanDelay(1000, 1500); // Giảm 70%
       await HumanBehavior.humanScroll(this.page, { distance: 200 });
-      await HumanBehavior.humanDelay(2000, 3000);
+      await HumanBehavior.humanDelay(800, 1200); // Giảm 60%
 
       // Check captcha TRƯỚC KHI login
       let captchaCheck = await CaptchaEvasion.detectCaptcha(this.page);
@@ -128,7 +128,7 @@ class FacebookWith2FA {
         typoChance: 0.02,
       });
       
-      await HumanBehavior.humanDelay(1000, 2000);
+      await HumanBehavior.humanDelay(500, 800);
       
       await HumanBehavior.humanType(this.page, 'input[name="pass"]', password, {
         minDelay: 70,
@@ -137,7 +137,7 @@ class FacebookWith2FA {
       });
 
       // Human pause trước khi click
-      await HumanBehavior.humanDelay(1500, 3000);
+      await HumanBehavior.humanDelay(700, 1200);
 
       // BƯỚC 3: Click đăng nhập với HUMAN BEHAVIOR
       this.log('🔐 Nhấn đăng nhập...', 'info');
@@ -147,7 +147,7 @@ class FacebookWith2FA {
       });
       
       // Đợi lâu hơn sau khi click
-      await HumanBehavior.humanDelay(4000, 6000);
+      await HumanBehavior.humanDelay(1500, 2500);
 
       // BƯỚC 4: Kiểm tra và xử lý 2FA
       const needsTwoFA = await this.detect2FAPage();
@@ -167,30 +167,30 @@ class FacebookWith2FA {
           if (!handled.success) {
             throw new Error('Cannot bypass captcha at 2FA page');
           }
-          await HumanBehavior.humanDelay(3000, 5000);
+          await HumanBehavior.humanDelay(1000, 1800);
         }
         
         // Human delay trước khi click
-        await HumanBehavior.humanDelay(2000, 4000);
+        await HumanBehavior.humanDelay(800, 1500);
         
         // Click "Thử cách khác" nếu có
         const clickedTryCach = await this.clickTryCachKhac();
         if (clickedTryCach) {
-          await HumanBehavior.humanDelay(2000, 3000);
+          await HumanBehavior.humanDelay(800, 1200);
           
           // Chọn "Ứng dụng xác thực"
           const clickedUngDung = await this.clickUngDungXacThuc();
           if (clickedUngDung) {
-            await HumanBehavior.humanDelay(2000, 3000);
+            await HumanBehavior.humanDelay(800, 1200);
             
             // Click "Tiếp tục"
             await this.clickTiepTuc();
-            await HumanBehavior.humanDelay(2000, 3000);
+            await HumanBehavior.humanDelay(800, 1200);
           }
         }
         
         // Human delay trước khi generate TOTP
-        await HumanBehavior.humanDelay(1000, 2000);
+        await HumanBehavior.humanDelay(500, 800);
         
         // Tạo mã TOTP
         const totpCode = TwoFactorAuth.generateTOTP(twoFASecret);
@@ -199,7 +199,7 @@ class FacebookWith2FA {
         this.log(`🔑 Mã 2FA: ${totpCode} (còn ${timeRemaining}s)`, 'success');
 
         // Human delay trước khi điền
-        await HumanBehavior.humanDelay(1000, 2000);
+        await HumanBehavior.humanDelay(500, 800);
 
         // Điền mã 2FA
         const filled = await this.fill2FACode(totpCode);
@@ -209,21 +209,21 @@ class FacebookWith2FA {
         }
 
         this.log('✅ Đã điền mã 2FA, đang chờ xác thực...', 'info');
-        await HumanBehavior.humanDelay(5000, 8000);
+        await HumanBehavior.humanDelay(2000, 3000);
       }
 
       // BƯỚC 5: Xử lý popup "Lưu thông tin đăng nhập"
       this.log('🔍 Kiểm tra popup "Lưu thông tin"...', 'info');
-      await HumanBehavior.humanDelay(2000, 3000);
+      await HumanBehavior.humanDelay(800, 1200);
       await this.clickLuuThongTin();
       
       // BƯỚC 6: Xử lý "Tin cậy thiết bị này"
       this.log('🔍 Kiểm tra "Tin cậy thiết bị này"...', 'info');
-      await HumanBehavior.humanDelay(2000, 3000);
+      await HumanBehavior.humanDelay(800, 1200);
       await this.clickTinCayThietBi();
       
       // BƯỚC 7: Đợi page load hoàn toàn
-      await HumanBehavior.humanDelay(3000, 5000);
+      await HumanBehavior.humanDelay(1000, 1800);
       
       // BƯỚC 8: Kiểm tra đăng nhập thành công
       const loginSuccess = await this.checkLoginSuccess();
@@ -313,7 +313,7 @@ class FacebookWith2FA {
       this.log(`🔍 Đang tìm ô nhập mã 2FA...`, 'info');
       
       // Đợi page load sau khi click "Tiếp tục"
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(800);
       
       // Chiến lược 1: Tìm input bằng name="approvals_code"
       const approvalInputCount = await this.page.locator('input[name="approvals_code"]').count();
@@ -327,7 +327,7 @@ class FacebookWith2FA {
           maxDelay: 200,
         });
         
-        await HumanBehavior.humanDelay(1000, 2000);
+        await HumanBehavior.humanDelay(500, 800);
         
         // Click submit
         await this.clickSubmitButton();
@@ -345,12 +345,12 @@ class FacebookWith2FA {
           
           // Click vào input
           await input.click();
-          await HumanBehavior.humanDelay(500, 1000);
+          await HumanBehavior.humanDelay(300, 600);
           
           // Type code human-like
-          await input.pressSequentially(code, { delay: 150 });
+          await input.pressSequentially(code, { delay: 80 }); // Giảm từ 150ms
           
-          await HumanBehavior.humanDelay(1000, 2000);
+          await HumanBehavior.humanDelay(500, 800);
           
           // Click submit
           await this.clickSubmitButton();
@@ -413,7 +413,7 @@ class FacebookWith2FA {
 
       if (filled) {
         this.log(`✓ Đã điền mã bằng evaluate`, 'info');
-        await this.page.waitForTimeout(1000);
+        await this.page.waitForTimeout(400);
         await this.clickSubmitButton();
         return true;
       }
@@ -470,7 +470,7 @@ class FacebookWith2FA {
     try {
       // Đợi tối đa 15 giây
       for (let i = 0; i < 30; i++) {
-        await this.page.waitForTimeout(500);
+        await this.page.waitForTimeout(200);
         
         const url = this.page.url();
         
@@ -511,7 +511,7 @@ class FacebookWith2FA {
           waitUntil: 'domcontentloaded',
           timeout: 15000 
         });
-        await this.page.waitForTimeout(3000);
+        await this.page.waitForTimeout(1200);
         
         const profileName = await this.page.evaluate(() => {
           // Tìm h1 đầu tiên (tên profile)
@@ -696,7 +696,7 @@ class FacebookWith2FA {
       this.log('🔍 Tìm và click "Ứng dụng xác thực"...', 'info');
       
       // Đợi một chút để page load
-      await this.page.waitForTimeout(1500);
+      await this.page.waitForTimeout(600);
       
       // Method 1: Tìm bằng Playwright locator
       const radioLabels = await this.page.locator('div[role="radio"], label, div[tabindex="0"]').all();
@@ -711,7 +711,7 @@ class FacebookWith2FA {
           
           // Human-like click
           await label.scrollIntoViewIfNeeded();
-          await HumanBehavior.humanDelay(500, 1000);
+          await HumanBehavior.humanDelay(300, 600);
           await label.click();
           
           this.log('✅ Đã click "Ứng dụng xác thực"', 'success');
@@ -786,7 +786,7 @@ class FacebookWith2FA {
       this.log('🔍 Tìm và click "Tiếp tục"...', 'info');
       
       // Đợi button xuất hiện
-      await this.page.waitForTimeout(1500);
+      await this.page.waitForTimeout(600);
       
       // Method 1: Tìm bằng Playwright locator
       const buttons = await this.page.locator('button, div[role="button"], [role="button"]').all();
@@ -805,7 +805,7 @@ class FacebookWith2FA {
             
             // Human-like click
             await button.scrollIntoViewIfNeeded();
-            await HumanBehavior.humanDelay(500, 1000);
+            await HumanBehavior.humanDelay(300, 600);
             await button.click();
             
             this.log('✅ Đã click "Tiếp tục"', 'success');
@@ -868,7 +868,7 @@ class FacebookWith2FA {
       this.log('🔍 Tìm nút "Lưu" thông tin đăng nhập...', 'info');
       
       // Đợi popup xuất hiện
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(800);
       
       // Method 1: Tìm button "Lưu"
       const buttons = await this.page.locator('button, div[role="button"]').all();
@@ -884,7 +884,7 @@ class FacebookWith2FA {
             
             this.log('✓ Tìm thấy nút "Lưu"', 'info');
             await button.scrollIntoViewIfNeeded();
-            await HumanBehavior.humanDelay(500, 1000);
+            await HumanBehavior.humanDelay(300, 600);
             await button.click();
             
             this.log('✅ Đã click "Lưu"', 'success');
@@ -936,7 +936,7 @@ class FacebookWith2FA {
       this.log('🔍 Tìm nút "Tin cậy thiết bị này"...', 'info');
       
       // Đợi page load
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(800);
       
       // Method 1: Tìm button
       const buttons = await this.page.locator('button, div[role="button"]').all();
@@ -953,7 +953,7 @@ class FacebookWith2FA {
             
             this.log('✓ Tìm thấy nút "Tin cậy thiết bị này"', 'info');
             await button.scrollIntoViewIfNeeded();
-            await HumanBehavior.humanDelay(500, 1000);
+            await HumanBehavior.humanDelay(300, 600);
             await button.click();
             
             this.log('✅ Đã click "Tin cậy thiết bị này"', 'success');

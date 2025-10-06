@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   // Authentication
   loginFacebook: (credentials) => ipcRenderer.invoke('login-facebook', credentials),
   loginFacebookWith2FA: (credentials) => ipcRenderer.invoke('login-facebook-with-2fa', credentials),
-  loginAccountWithSession: (accountId, sessionData) => ipcRenderer.invoke('login-account-with-session', { accountId, sessionData }),
+  loginAccountWithSession: (accountId, sessionData, options) => ipcRenderer.invoke('login-account-with-session', { accountId, sessionData, options }),
   logoutAccount: (accountId) => ipcRenderer.invoke('logout-account', accountId),
   
   // Import accounts

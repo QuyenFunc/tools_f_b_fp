@@ -4,69 +4,158 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
-  <title>Facebook Page Manager</title>
+  <title>Quản lý tài khoản Facebook & Fanpage</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
-    <!-- Login Screen -->
+    <!-- ==================== LOGIN/ACCOUNT MANAGEMENT SCREEN ==================== -->
     <div id="loginScreen" class="login-screen">
-      <div class="login-card">
-        <div class="login-header">
-          <h1>Facebook Page Manager</h1>
-          <p>Quản lý nhiều tài khoản & Fanpage</p>
+      <!-- Topbar -->
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="app-logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <rect width="32" height="32" rx="8" fill="#2563EB"/>
+              <path d="M16 8C12.13 8 9 11.13 9 15C9 18.87 12.13 22 16 22C19.87 22 23 18.87 23 15C23 11.13 19.87 8 16 8ZM17 18H15V14H17V18Z" fill="white"/>
+            </svg>
+          </div>
+          <h1 class="app-title">Quản lý tài khoản Facebook & Fanpage</h1>
         </div>
-
-        <div id="savedAccountsDiv" class="saved-accounts" style="display: none;">
-          <h3>Tài khoản đã lưu</h3>
-          <div id="savedAccountsList" class="saved-accounts-list"></div>
-          <button id="clearAllAccountsBtn" class="btn btn-secondary btn-small">Xóa tất cả</button>
-        </div>
-
-        <div class="login-form-section">
-          <h3>Đăng nhập tài khoản mới</h3>
-          <form id="loginForm">
-            <div class="form-group">
-              <label for="email">Email hoặc Số điện thoại</label>
-              <input type="text" id="email" name="email" required autocomplete="username">
-            </div>
-            
-            <div class="form-group">
-              <label for="password">Mật khẩu</label>
-              <input type="password" id="password" name="password" required autocomplete="current-password">
-            </div>
-            
-            <div class="form-group">
-              <label for="twoFASecret">2FA Secret (tùy chọn)</label>
-              <input type="text" id="twoFASecret" name="twoFASecret" placeholder="Nhập secret key nếu có 2FA" autocomplete="off">
-              <small style="color: #999; display: block; margin-top: 5px;">Hoặc <a href="#" id="showImportLink" style="color: #1877f2;">import nhiều tài khoản</a></small>
-            </div>
-            
-            <div class="form-group checkbox">
-              <label>
-                <input type="checkbox" id="saveSession" name="saveSession" checked>
-                Lưu phiên đăng nhập
-              </label>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-large">Đăng nhập</button>
-          </form>
-          
-          <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;">
-            <button id="quickLoginBtn" class="btn btn-secondary" style="width: 100%; font-size: 1rem; padding: 12px;">
-              ⚡ Đăng Nhập Nhanh (Paste danh sách)
-            </button>
+        <div class="topbar-right">
+          <button id="addAccountBtnTop" class="btn btn-primary btn-with-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 5v10M5 10h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Thêm tài khoản
+          </button>
+          <div class="connection-status" id="connectionStatus">
+            <span class="status-dot status-online"></span>
+            <span class="status-text">Đang hoạt động</span>
           </div>
         </div>
+      </div>
 
-        <div class="info-box">
-          <p><strong>Lưu ý:</strong></p>
-          <ul>
-            <li>Có thể thêm nhiều tài khoản và làm việc song song</li>
-            <li>Thông tin được mã hóa an toàn</li>
-            <li>Hỗ trợ xác minh 2FA tự động</li>
-            <li>Import hàng loạt tài khoản với 2FA</li>
-          </ul>
+      <!-- Main Layout: Sidebar + Content -->
+      <div class="login-layout">
+        <!-- Sidebar: Account Management -->
+        <aside class="accounts-sidebar">
+          <div class="sidebar-header">
+            <h3>Tài khoản đã lưu</h3>
+            <div class="sidebar-actions">
+              <button class="btn-icon" id="importCSVBtn" title="Nhập từ CSV">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 3v10m0 0l3-3m-3 3l-3-3m8 8v1a2 2 0 01-2 2H7a2 2 0 01-2-2v-1" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="btn-icon" id="exportCSVBtn" title="Xuất CSV">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 17V7m0 0l3 3m-3-3l-3 3m8-8v-1a2 2 0 00-2-2H7a2 2 0 00-2 2v1" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="btn-icon btn-icon-danger" id="clearAllAccountsBtn" title="Xóa tất cả">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M4 7h12m-1 0v9a2 2 0 01-2 2H7a2 2 0 01-2-2V7m3-3h4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Search & Filter -->
+          <div class="sidebar-search">
+            <div class="search-input-wrapper">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" class="search-icon">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+              </svg>
+              <input type="text" id="accountSearch" placeholder="Tìm kiếm tài khoản..." class="search-input">
+            </div>
+            <div class="filter-tags">
+              <button class="filter-tag active" data-filter="all">Tất cả</button>
+              <button class="filter-tag" data-filter="active">Đang hoạt động</button>
+              <button class="filter-tag" data-filter="expired">Hết hạn</button>
+            </div>
+          </div>
+
+          <!-- Account List -->
+          <div class="accounts-list-wrapper" id="savedAccountsListWrapper">
+            <div id="savedAccountsList" class="accounts-list">
+              <!-- Empty state -->
+              <div class="empty-state">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                  <circle cx="32" cy="32" r="30" stroke="#E5E7EB" stroke-width="2"/>
+                  <path d="M32 20v24M20 32h24" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <p>Chưa có tài khoản</p>
+                <button class="btn btn-secondary btn-sm" id="addAccountBtnEmpty">Thêm tài khoản đầu tiên</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Content: Login Form -->
+        <div class="login-content">
+          <div class="content-card">
+            <div class="card-header-section">
+              <h2>Đăng nhập tài khoản</h2>
+              <p class="helper-text">Thêm tài khoản mới vào hệ thống quản lý</p>
+            </div>
+
+            <form id="loginForm">
+              <!-- Email/SĐT Method (Always visible) -->
+              <div id="emailMethod" class="login-method active">
+                <div class="form-group">
+                  <label for="email" class="form-label">Email / Số điện thoại</label>
+                  <input type="text" id="email" name="email" class="form-input" placeholder="Ví dụ: 09xx... hoặc name@email.com" autocomplete="username">
+                  <span class="helper-text">Nhập email hoặc số điện thoại đăng ký Facebook</span>
+                </div>
+                
+                <div class="form-group">
+                  <label for="password" class="form-label">Mật khẩu</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Nhập mật khẩu" autocomplete="current-password">
+                    <button type="button" class="input-icon-btn" id="togglePassword" tabindex="-1">
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" class="icon-eye">
+                        <path d="M10 3C5 3 1.73 7.11 1 10c.73 2.89 4 7 9 7s8.27-4.11 9-7c-.73-2.89-4-7-9-7zm0 12a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <span class="helper-text">Tối thiểu 8 ký tự</span>
+                  <div id="capsLockWarning" class="warning-message" style="display: none;">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Caps Lock đang bật
+                  </div>
+                </div>
+              </div>
+
+              <!-- Submit Button -->
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large btn-block" id="loginSubmitBtn">
+                  <span class="btn-text">Đăng nhập</span>
+                  <span class="btn-loader" style="display: none;"></span>
+                </button>
+              </div>
+            </form>
+
+            <!-- Footer Links -->
+            <div class="card-footer">
+              <a href="#" id="showBatchLoginLink" class="link-primary">Nhập nhiều tài khoản cùng lúc</a>
+            </div>
+          </div>
+
+          <!-- Back to Home Button -->
+          <div style="text-align: center; margin-top: var(--space-4);">
+            <button id="backToAppBtn" class="btn btn-secondary" style="display: none;">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"/>
+              </svg>
+              Quay về trang chủ
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -76,13 +165,34 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-header">
-          <h2>FB Manager</h2>
+          <div class="sidebar-logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <rect width="32" height="32" rx="8" fill="url(#sidebarGradient)"/>
+              <path d="M16 8C12.13 8 9 11.13 9 15C9 18.87 12.13 22 16 22C19.87 22 23 18.87 23 15C23 11.13 19.87 8 16 8ZM17 18H15V14H17V18Z" fill="white"/>
+              <defs>
+                <linearGradient id="sidebarGradient" x1="0" y1="0" x2="32" y2="32">
+                  <stop offset="0%" stop-color="#667eea"/>
+                  <stop offset="100%" stop-color="#764ba2"/>
+                </linearGradient>
+              </defs>
+            </svg>
+            <h2>FB Manager</h2>
+          </div>
+          <button id="backToHomeBtn" class="btn-icon-home" title="Trang chủ">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 2.5L2 9h2v7h4v-5h4v5h4V9h2l-8-6.5z"/>
+            </svg>
+          </button>
         </div>
 
         <div class="accounts-section">
           <div class="section-title">
             <span>Tài khoản</span>
-            <button id="addAccountBtn" class="btn-icon" title="Thêm tài khoản">+</button>
+            <button id="addAccountBtn" class="btn-icon-add" title="Thêm tài khoản">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
           </div>
           <div id="accountsList" class="accounts-list"></div>
         </div>
@@ -237,48 +347,76 @@
       </div>
     </div>
 
-    <!-- Quick Login Dialog -->
-    <div id="quickLoginDialog" class="dialog-overlay" style="display: none;">
+    <!-- Batch Login Dialog -->
+    <div id="batchLoginDialog" class="dialog-overlay" style="display: none;">
       <div class="dialog-card" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
         <div class="dialog-header">
-          <h3>⚡ Đăng Nhập Nhanh - Tự Động Đăng Nhập Tất Cả</h3>
-          <button id="closeQuickLoginBtn" class="btn-close">×</button>
+          <h3>⚡ Nhập nhiều tài khoản cùng lúc</h3>
+          <button id="closeBatchLoginBtn" class="btn-close">×</button>
         </div>
         
         <div class="dialog-body">
-          <div style="background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-            <p style="margin: 0; color: #4caf50; font-weight: 600;">📋 Hướng dẫn:</p>
-            <ol style="margin: 10px 0 0 20px; color: #999; font-size: 0.9rem;">
+          <div class="info-box">
+            <p style="margin: 0; color: #16A34A; font-weight: 600;">📋 Hướng dẫn:</p>
+            <ol style="margin: 10px 0 0 20px; color: #64748b; font-size: 0.9rem;">
               <li>Paste danh sách tài khoản vào ô bên dưới</li>
-              <li>Format: <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">PageID|PageName|2FA_Secret|Email|Password|App_Password</code></li>
-              <li>Nhấn "Đăng Nhập Tất Cả" và chờ hệ thống tự động xử lý</li>
+              <li>Format: <code>PageID|PageName|2FA_Secret|Email|Password|App_Password</code></li>
+              <li>Nhấn "Đăng nhập tất cả" và chờ hệ thống tự động xử lý</li>
             </ol>
           </div>
           
           <textarea 
-            id="quickLoginText" 
+            id="batchLoginText" 
+            class="form-textarea"
+            rows="12"
             placeholder="Paste danh sách tài khoản vào đây (mỗi dòng 1 tài khoản)...
 
 Ví dụ:
 61568434832204|Moimedia@@|YDTCEYESIW4LBVLKK3A5HW3ZJKQ3SAF2|chelcabula@outlook.com|Moimedia@@@|chelcabulamoi@smvmail.com
 61578284326156|Xahoiden|2PZMMWKRLMYDHYOCRJDDEBR2KON3YUTP|hantrinh9024@gmail.com|Khanh@9999|eu7a 36qh..."
-            style="width: 100%; min-height: 350px; padding: 12px; border: 1px solid #444; border-radius: 8px; background: #1a1a1a; color: #fff; font-family: monospace; font-size: 0.9rem; resize: vertical;"
           ></textarea>
           
           <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">
-            <button id="quickLoginStartBtn" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 1rem;">
-              🚀 Đăng Nhập Tất Cả
+            <button id="batchLoginStartBtn" class="btn btn-primary btn-large" style="flex: 1;">
+              🚀 Đăng nhập tất cả
             </button>
-            <span id="quickLoginStatus" style="color: #999; font-size: 0.9rem;"></span>
+            <span id="batchLoginStatus" style="color: #64748b; font-size: 0.9rem;"></span>
           </div>
           
-          <div id="quickLoginProgress" style="margin-top: 20px; display: none;">
-            <div style="background: #2a2a2a; padding: 15px; border-radius: 8px;">
-              <h4 style="margin: 0 0 10px 0;">Tiến Trình: <span id="quickLoginCount">0/0</span></h4>
-              <div style="max-height: 300px; overflow-y: auto;" id="quickLoginResults"></div>
+          <div id="batchLoginProgress" style="margin-top: 20px; display: none;">
+            <div style="background: #F8FAFC; padding: 15px; border-radius: 12px; border: 1px solid #E5E7EB;">
+              <h4 style="margin: 0 0 10px 0;">Tiến trình: <span id="batchLoginCount">0/0</span></h4>
+              <div style="max-height: 300px; overflow-y: auto;" id="batchLoginResults"></div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirmDialog" class="dialog-overlay" style="display: none;">
+      <div class="dialog-card" style="max-width: 480px;">
+        <div class="dialog-header">
+          <h3 id="confirmTitle">Xác nhận</h3>
+          <button id="closeConfirmBtn" class="btn-close">×</button>
+        </div>
+        <div class="dialog-body">
+          <p id="confirmMessage" style="color: #64748b; margin-bottom: 20px;"></p>
+          <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button id="confirmCancelBtn" class="btn btn-secondary">Hủy</button>
+            <button id="confirmOkBtn" class="btn btn-danger">Xác nhận</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast" style="display: none;">
+      <div class="toast-content">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" class="toast-icon">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        <span id="toastMessage">Thông báo</span>
       </div>
     </div>
   </div>

@@ -189,11 +189,19 @@ class FacebookAutomation {
 
   async loginWithSession(sessionData, headless = true) {
     try {
-      this.log('Dang khoi dong trinh duyet...', 'info');
+      this.log('⚡ Khoi dong trinh duyet (toc do cao)...', 'info');
       
+      // Tăng tốc: Launch với args tối ưu
       this.browser = await chromium.launch({
         headless: headless,
-        args: headless ? [] : ['--start-maximized']
+        args: headless ? [
+          '--disable-dev-shm-usage',
+          '--disable-setuid-sandbox',
+          '--no-sandbox',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-extensions'
+        ] : ['--start-maximized']
       });
 
       this.context = await this.browser.newContext({
@@ -201,7 +209,20 @@ class FacebookAutomation {
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       });
 
-      // Restore cookies
+      // Tăng tốc: Chặn tài nguyên không cần thiết
+      if (headless) {
+        await this.context.route('**/*', (route) => {
+          const resourceType = route.request().resourceType();
+          // Chỉ chặn images, fonts, media để tăng tốc
+          if (['image', 'font', 'media'].includes(resourceType)) {
+            route.abort();
+          } else {
+            route.continue();
+          }
+        });
+      }
+
+      // Restore cookies trước
       if (sessionData.cookies) {
         await this.context.addCookies(sessionData.cookies);
       }
@@ -218,24 +239,26 @@ class FacebookAutomation {
         }, sessionData.localStorage);
       }
 
-      this.log('Dang xac minh session...', 'info');
+      this.log('⚡ Xac minh session (fast mode)...', 'info');
+      
+      // Tăng tốc: Chỉ đợi commit, không cần load hết
       await this.page.goto('https://www.facebook.com/', { 
-        waitUntil: 'domcontentloaded',
-        timeout: 10000 
+        waitUntil: 'commit', // Nhanh hơn domcontentloaded
+        timeout: 8000 // Giảm timeout
       });
 
-      // Kiểm tra NHANH
-      await this.page.waitForTimeout(1500); // Giảm từ 3000ms
+      // Tăng tốc: Giảm thời gian chờ xuống 800ms
+      await this.page.waitForTimeout(800);
       
       const isLoggedIn = await this.page.evaluate(() => {
         return !document.querySelector('input[name="email"]');
       });
 
       if (isLoggedIn) {
-        this.log('Dang nhap bang session thanh cong!', 'success');
+        this.log('✅ Session hop le!', 'success');
         
-        // Lấy tên user
-        const userName = await this.getUserName();
+        // Tăng tốc: Lấy tên user nhanh hơn
+        const userName = await this.getUserNameFast();
         
         return {
           success: true,
@@ -243,7 +266,7 @@ class FacebookAutomation {
           userName: userName
         };
       } else {
-        this.log('Session da het han', 'error');
+        this.log('❌ Session het han', 'error');
         await this.close();
         return {
           success: false,
@@ -251,12 +274,58 @@ class FacebookAutomation {
         };
       }
     } catch (error) {
-      this.log(`Loi dang nhap bang session: ${error.message}`, 'error');
+      this.log(`❌ Loi session: ${error.message}`, 'error');
       await this.close();
       return {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  // Tăng tốc: Lấy user name nhanh hơn
+  async getUserNameFast() {
+    try {
+      // Thử lấy từ API Facebook (nhanh nhất)
+      const userName = await this.page.evaluate(() => {
+        // Thử lấy từ meta tag
+        const metaTag = document.querySelector('meta[property="og:title"]');
+        if (metaTag) {
+          const content = metaTag.getAttribute('content');
+          if (content && !content.includes('Facebook')) {
+            return content;
+          }
+        }
+        
+        // Thử lấy từ profile link
+        const profileLink = document.querySelector('a[href*="/me/"]');
+        if (profileLink) {
+          const text = profileLink.textContent || profileLink.innerText;
+          if (text && text.trim()) {
+            return text.trim();
+          }
+        }
+        
+        // Thử lấy từ bất kỳ element nào có attribute data-hovercard-prefer-more-content-show
+        const hovercard = document.querySelector('[data-hovercard-prefer-more-content-show="1"]');
+        if (hovercard) {
+          const text = hovercard.textContent || hovercard.innerText;
+          if (text && text.trim()) {
+            return text.trim();
+          }
+        }
+        
+        return null;
+      });
+
+      if (userName) {
+        return userName;
+      }
+
+      // Fallback: Dùng phương pháp cũ nhưng với timeout ngắn hơn
+      return await this.getUserName();
+    } catch (error) {
+      return 'Facebook User';
     }
   }
 
@@ -274,27 +343,28 @@ class FacebookAutomation {
         await this.page.waitForTimeout(3000); // Đợi lâu hơn
         
         const profileName = await this.page.evaluate(() => {
-          // CÁCH 1: Lấy từ thẻ h1 đầu tiên (tên profile)
-          const h1Elements = document.querySelectorAll('h1');
-          for (const h1 of h1Elements) {
-            const text = h1.textContent.trim();
+          // Helper function để validate tên
+          const isValidName = (text) => {
+            if (!text || text.length < 2 || text.length > 100) return false;
             
-            // Bỏ qua text rỗng hoặc quá ngắn
-            if (!text || text.length < 2) continue;
-            
-            // Bỏ qua text chung chung
             const forbidden = [
               'facebook', 'profile', 'trang cá nhân', 'home', 'đoạn chat',
               'chats', 'messages', 'messenger', 'bạn bè', 'friends', 'video',
-              'watch', 'marketplace', 'groups', 'pages', 'notifications'
+              'watch', 'marketplace', 'groups', 'pages', 'notifications', 'thông báo',
+              'notification', 'menu', 'trang chủ', 'newsfeed', 'news feed', 'người dùng'
             ];
             
-            const textLower = text.toLowerCase();
-            const isForbidden = forbidden.some(f => textLower.includes(f));
-            
-            if (!isForbidden && text.length >= 2 && text.length <= 100) {
-              console.log(`✓ Tìm thấy tên từ h1: ${text}`);
-              return text;
+            const textLower = text.toLowerCase().trim();
+            return !forbidden.some(f => textLower.includes(f));
+          };
+          
+          // CÁCH 1: Lấy từ meta og:title (CHÍNH XÁC NHẤT)
+          const metaTitle = document.querySelector('meta[property="og:title"]');
+          if (metaTitle) {
+            const content = metaTitle.getAttribute('content');
+            if (isValidName(content)) {
+              console.log(`✓ Tìm thấy tên từ meta og:title: ${content}`);
+              return content;
             }
           }
           
@@ -302,30 +372,36 @@ class FacebookAutomation {
           if (document.title) {
             const titleParts = document.title.split('|');
             const possibleName = titleParts[0].trim();
-            
-            if (possibleName && 
-                !possibleName.toLowerCase().startsWith('facebook') &&
-                possibleName.length >= 2 &&
-                possibleName.length <= 100) {
+            if (isValidName(possibleName)) {
               console.log(`✓ Tìm thấy tên từ title: ${possibleName}`);
               return possibleName;
             }
           }
           
-          // CÁCH 3: Lấy từ meta og:title
-          const metaTitle = document.querySelector('meta[property="og:title"]');
-          if (metaTitle) {
-            const content = metaTitle.getAttribute('content');
-            if (content && 
-                !content.toLowerCase().startsWith('facebook') &&
-                content.length >= 2 &&
-                content.length <= 100) {
-              console.log(`✓ Tìm thấy tên từ meta: ${content}`);
-              return content;
+          // CÁCH 3: Lấy từ h1 đầu tiên trong main content
+          const mainContent = document.querySelector('main, [role="main"], #content');
+          if (mainContent) {
+            const h1 = mainContent.querySelector('h1');
+            if (h1) {
+              const text = h1.textContent.trim();
+              if (isValidName(text)) {
+                console.log(`✓ Tìm thấy tên từ h1 trong main: ${text}`);
+                return text;
+              }
             }
           }
           
-          console.error('✗ Không tìm thấy tên');
+          // CÁCH 4: Lấy từ tất cả h1 (fallback)
+          const h1Elements = document.querySelectorAll('h1');
+          for (const h1 of h1Elements) {
+            const text = h1.textContent.trim();
+            if (isValidName(text)) {
+              console.log(`✓ Tìm thấy tên từ h1: ${text}`);
+              return text;
+            }
+          }
+          
+          console.error('✗ Không tìm thấy tên hợp lệ');
           return null;
         });
         
