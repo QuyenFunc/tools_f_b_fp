@@ -38,8 +38,8 @@ class HeadlessDeleter {
         : `${fanpageUrl}?sk=photos_by`;
       
       this.log(`[Browser ${browserIndex}] Vao trang anh: ${photosUrl}`, 'info');
-      await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.waitForTimeout(3000);
+      await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }); // Tối ưu: 15000ms → 12000ms
+      await page.waitForTimeout(2000); // Tối ưu: 3000ms → 2000ms
       
       let deletedCount = 0;
       let failedCount = 0;
@@ -86,8 +86,28 @@ class HeadlessDeleter {
           }
           
           // Đợi ảnh mở popup
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(1500); // Tối ưu: 2000ms → 1500ms
           
+          // GUARD #1 + #2: Gặp popup "Chọn đối tượng" hoặc đang mở Ảnh đại diện hiện tại
+const hitAudiencePopup = await page.evaluate(() => {
+  const t = (document.body.innerText || '').toLowerCase();
+  return t.includes('chọn đối tượng') || t.includes('choose audience');
+});
+const isCurrentAvatar = await page.evaluate(() => {
+  const t = (document.body.innerText || '').toLowerCase();
+  return t.includes('ảnh đại diện hiện tại') ||
+         t.includes('current profile picture') ||
+         t.includes('thêm khung') || t.includes('add frame') ||
+         t.includes('cập nhật ảnh đại diện') || t.includes('update profile picture');
+});
+
+if (hitAudiencePopup || isCurrentAvatar) {
+  this.log(`[Browser ${browserIndex}] Ảnh đại diện hiện tại (hiện "Chọn đối tượng") → kết thúc.`, 'success');
+  await page.keyboard.press('Escape').catch(()=>{});
+  noMorePhotos = true;
+  break; // thoát vòng while
+}
+
           // Click icon cây bút (Edit) - Đa ngôn ngữ
           const editClicked = await page.evaluate(() => {
             // Tìm tất cả buttons
@@ -138,7 +158,7 @@ class HeadlessDeleter {
           // Reset consecutive failures khi tìm thấy button
           consecutiveFailures = 0;
           
-          await page.waitForTimeout(1200);
+          await page.waitForTimeout(800); // Tối ưu: 1200ms → 800ms
           
           // Click "Xóa ảnh" / "Delete photo" - Đa ngôn ngữ
           const deleteClicked = await page.evaluate(() => {
@@ -183,7 +203,7 @@ class HeadlessDeleter {
             continue;
           }
           
-          await page.waitForTimeout(1500);
+          await page.waitForTimeout(1000); // Tối ưu: 1500ms → 1000ms
           
           // Xác nhận xóa - ĐƠN GIẢN HÓA: Tìm nút "Xóa" trong dialog
           const confirmed = await page.evaluate(() => {
@@ -251,18 +271,18 @@ class HeadlessDeleter {
             deletedCount++;
             consecutiveFailures = 0; // Reset khi xóa thành công
             this.log(`[Browser ${browserIndex}] ✓ Xoa thanh cong: ${deletedCount}`, 'success');
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(1500); // Tối ưu: 2000ms → 1500ms
             
             // Quay lại trang ảnh
-            await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-            await page.waitForTimeout(2500);
+            await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }); // Tối ưu: 15000ms → 12000ms
+            await page.waitForTimeout(1800); // Tối ưu: 2500ms → 1800ms
           } else {
             this.log(`[Browser ${browserIndex}] ⚠️ Khong tim thay nut xac nhan`, 'warning');
             
             // Thử phím tắt Enter
             this.log(`[Browser ${browserIndex}] Thu phim Enter...`, 'info');
             await page.keyboard.press('Enter');
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(1500); // Tối ưu: 2000ms → 1500ms
             
             // Kiểm tra xem có back về trang photos không
             const currentUrl = page.url();
@@ -270,8 +290,8 @@ class HeadlessDeleter {
               deletedCount++;
               consecutiveFailures = 0; // Reset
               this.log(`[Browser ${browserIndex}] ✓ Xoa thanh cong (Enter)`, 'success');
-              await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-              await page.waitForTimeout(2500);
+              await page.goto(photosUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }); // Tối ưu: 15000ms → 12000ms
+              await page.waitForTimeout(1800); // Tối ưu: 2500ms → 1800ms
             } else {
               // Thất bại - Escape nhiều lần và quay lại
               this.log(`[Browser ${browserIndex}] That bai, escape va quay lai...`, 'warning');
@@ -472,12 +492,14 @@ class HeadlessDeleter {
   // Xóa nhiều ảnh trên 1 browser - TỪ GRID (NHANH!)
   async deleteInBrowser(chunk, pageUrl) {
     const browser = await chromium.launch({
-      headless: false, // DEBUG: Hiển thị browser để debug
+      headless: true, // ⚡ HEADLESS: Tăng tốc độ
       args: [
-        '--start-maximized',
         '--no-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-dev-tools',
+        '--disable-features=TranslateUI',
+        '--disable-extensions'
       ]
     });
 
@@ -660,12 +682,14 @@ class HeadlessDeleter {
     
     // Tạo 1 browser duy nhất
     const browser = await chromium.launch({
-      headless: false, // DEBUG: Hiển thị browser
+      headless: true, // ⚡ HEADLESS: Tăng tốc độ
       args: [
-        '--start-maximized',
         '--no-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-dev-tools',
+        '--disable-features=TranslateUI',
+        '--disable-extensions'
       ]
     });
     

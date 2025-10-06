@@ -3,6 +3,7 @@ const state = {
   accounts: new Map(), // accountId -> { userName, fanpages: [], selectedFanpage: null }
   currentAccountId: null,
   taskQueue: [],
+  taskHistory: [], // Lưu lịch sử task (persistent)
   selectedPhotos: new Set(),
   uploadPhotos: [],
   captions: {} // photoPath -> caption
@@ -56,6 +57,7 @@ const currentTaskDisplay = document.getElementById('currentTaskDisplay');
 async function init() {
   setupEventListeners();
   await loadSavedAccounts();
+  await loadTaskHistory(); // Load lịch sử từ localStorage
   
   // Auto login saved accounts
   const savedAccounts = await window.api.getSavedAccounts();
@@ -80,6 +82,28 @@ function setupEventListeners() {
   closeUploadDialogBtn.addEventListener('click', hideUploadDialog);
   selectFolderBtn.addEventListener('click', handleSelectFolder);
   confirmUploadBtn.addEventListener('click', handleConfirmUpload);
+  
+  // Clear history button
+  const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', clearTaskHistory);
+  }
+  
+  // Quick Login
+  const quickLoginBtn = document.getElementById('quickLoginBtn');
+  if (quickLoginBtn) {
+    quickLoginBtn.addEventListener('click', showQuickLoginDialog);
+  }
+  
+  const closeQuickLoginBtn = document.getElementById('closeQuickLoginBtn');
+  if (closeQuickLoginBtn) {
+    closeQuickLoginBtn.addEventListener('click', hideQuickLoginDialog);
+  }
+  
+  const quickLoginStartBtn = document.getElementById('quickLoginStartBtn');
+  if (quickLoginStartBtn) {
+    quickLoginStartBtn.addEventListener('click', handleQuickLogin);
+  }
 
   // Progress listener
   window.api.onProgress((data) => {
@@ -183,11 +207,17 @@ async function handleLogin(e) {
   
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
+  const twoFASecret = document.getElementById('twoFASecret').value;
   const saveSession = document.getElementById('saveSession').checked;
 
   showProgress('Đang đăng nhập...', 0, 100, 'Vui lòng đợi...');
 
-  const result = await window.api.loginFacebook({ email, password, saveSession });
+  const result = await window.api.loginFacebook({ 
+    email, 
+    password, 
+    saveSession,
+    twoFASecret: twoFASecret || null
+  });
   
   hideProgress();
 
@@ -630,14 +660,46 @@ async function processTaskQueue() {
     task.completedAt = new Date();
   }
   
-  // Remove completed/failed tasks after 5 seconds
+  // LƯU VÀO LỊCH SỬ (không xóa nữa)
+  const historyTask = {
+    id: task.id,
+    type: task.type,
+    accountId: task.accountId,
+    fanpageId: task.fanpageId,
+    fanpageName: task.fanpageName,
+    photoCount: task.photoCount,
+    status: task.status,
+    addedAt: task.addedAt,
+    startedAt: task.startedAt,
+    completedAt: task.completedAt,
+    result: task.result ? {
+      success: task.result.success,
+      deleted: task.result.deleted,
+      uploaded: task.result.uploaded,
+      failed: task.result.failed,
+      total: task.result.total
+    } : null,
+    error: task.error
+  };
+  
+  state.taskHistory.unshift(historyTask); // Thêm vào đầu mảng
+  
+  // Giới hạn lịch sử: 100 tasks gần nhất
+  if (state.taskHistory.length > 100) {
+    state.taskHistory = state.taskHistory.slice(0, 100);
+  }
+  
+  // Lưu vào localStorage
+  saveTaskHistory();
+  
+  // Xóa khỏi queue sau 3 giây
   setTimeout(() => {
     const index = state.taskQueue.indexOf(task);
     if (index > -1) {
       state.taskQueue.splice(index, 1);
       updateQueueStatus();
     }
-  }, 5000);
+  }, 3000);
   
   updateQueueStatus();
   
@@ -648,7 +710,6 @@ async function processTaskQueue() {
 function updateQueueStatus() {
   const running = state.taskQueue.filter(t => t.status === 'running');
   const pending = state.taskQueue.filter(t => t.status === 'pending');
-  const completed = state.taskQueue.filter(t => t.status === 'completed' || t.status === 'failed');
   
   currentTaskCount.textContent = running.length;
   pendingTaskCount.textContent = pending.length;
@@ -669,10 +730,10 @@ function updateQueueStatus() {
     upcomingTasks.innerHTML = '<p class="empty-state">Không có tác vụ nào</p>';
   }
   
-  // Task History
+  // Task History - Hiển thị từ state.taskHistory (persistent)
   const taskHistory = document.getElementById('taskHistory');
-  if (completed.length > 0) {
-    taskHistory.innerHTML = completed.slice(-10).reverse().map(task => createTaskCard(task, task.status)).join('');
+  if (state.taskHistory.length > 0) {
+    taskHistory.innerHTML = state.taskHistory.slice(0, 20).map(task => createTaskCard(task, task.status)).join('');
   } else {
     taskHistory.innerHTML = '<p class="empty-state">Chưa có lịch sử</p>';
   }
@@ -742,6 +803,223 @@ function showLoginScreen() {
 function showAppScreen() {
   loginScreen.style.display = 'none';
   appScreen.style.display = 'flex';
+}
+
+// ==================== TASK HISTORY PERSISTENCE ====================
+function saveTaskHistory() {
+  try {
+    localStorage.setItem('taskHistory', JSON.stringify(state.taskHistory));
+  } catch (error) {
+    console.error('Lỗi lưu lịch sử:', error);
+  }
+}
+
+async function loadTaskHistory() {
+  try {
+    const saved = localStorage.getItem('taskHistory');
+    if (saved) {
+      state.taskHistory = JSON.parse(saved);
+      console.log(`✓ Đã load ${state.taskHistory.length} tasks từ lịch sử`);
+    }
+  } catch (error) {
+    console.error('Lỗi load lịch sử:', error);
+    state.taskHistory = [];
+  }
+}
+
+function clearTaskHistory() {
+  if (confirm('Xóa toàn bộ lịch sử?')) {
+    state.taskHistory = [];
+    saveTaskHistory();
+    updateQueueStatus();
+  }
+}
+
+// ==================== QUICK LOGIN ====================
+function showQuickLoginDialog() {
+  const dialog = document.getElementById('quickLoginDialog');
+  if (dialog) {
+    dialog.style.display = 'flex';
+  }
+}
+
+function hideQuickLoginDialog() {
+  const dialog = document.getElementById('quickLoginDialog');
+  if (dialog) {
+    dialog.style.display = 'none';
+  }
+  
+  // Clear
+  document.getElementById('quickLoginText').value = '';
+  document.getElementById('quickLoginProgress').style.display = 'none';
+  document.getElementById('quickLoginResults').innerHTML = '';
+}
+
+async function handleQuickLogin() {
+  const text = document.getElementById('quickLoginText').value;
+  const statusEl = document.getElementById('quickLoginStatus');
+  const startBtn = document.getElementById('quickLoginStartBtn');
+  
+  if (!text.trim()) {
+    statusEl.textContent = '⚠️ Vui lòng nhập danh sách!';
+    statusEl.style.color = '#ff4444';
+    return;
+  }
+  
+  // Parse accounts
+  statusEl.textContent = '⏳ Đang parse...';
+  statusEl.style.color = '#999';
+  
+  const parseResult = await window.api.parseAccountsText(text);
+  
+  if (!parseResult.success) {
+    statusEl.textContent = `❌ Lỗi parse: ${parseResult.error}`;
+    statusEl.style.color = '#ff4444';
+    return;
+  }
+  
+  const accounts = parseResult.accounts.filter(acc => acc.valid);
+  
+  if (accounts.length === 0) {
+    statusEl.textContent = '⚠️ Không có tài khoản hợp lệ!';
+    statusEl.style.color = '#ff4444';
+    return;
+  }
+  
+  // Confirm
+  if (!confirm(`🚀 Bắt đầu đăng nhập ${accounts.length} tài khoản?\n\n⏱️ Ước tính: ~${Math.ceil(accounts.length * 15 / 60)} phút\n\n✅ Mỗi tài khoản sẽ tự động:\n• Đăng nhập với 2FA\n• Tạo session riêng\n• Lưu vào hệ thống\n\nTiếp tục?`)) {
+    return;
+  }
+  
+  // Disable button
+  startBtn.disabled = true;
+  startBtn.textContent = '⏳ Đang xử lý...';
+  
+  // Show progress
+  const progressDiv = document.getElementById('quickLoginProgress');
+  const resultsDiv = document.getElementById('quickLoginResults');
+  const countEl = document.getElementById('quickLoginCount');
+  
+  progressDiv.style.display = 'block';
+  resultsDiv.innerHTML = '';
+  countEl.textContent = `0/${accounts.length}`;
+  
+  // Process accounts one by one
+  let successCount = 0;
+  let failedCount = 0;
+  
+  for (let i = 0; i < accounts.length; i++) {
+    const account = accounts[i];
+    countEl.textContent = `${i + 1}/${accounts.length}`;
+    
+    // Add loading item
+    const itemId = `quick-login-item-${i}`;
+    const item = document.createElement('div');
+    item.id = itemId;
+    item.style.cssText = 'padding: 10px; margin-bottom: 8px; background: #1a1a1a; border-radius: 6px; border-left: 3px solid #ffa500;';
+    item.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 1.2rem;">⏳</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 600;">${account.email}</div>
+          <div style="font-size: 0.85rem; color: #999; margin-top: 4px;">Đang đăng nhập...</div>
+        </div>
+      </div>
+    `;
+    resultsDiv.appendChild(item);
+    resultsDiv.scrollTop = resultsDiv.scrollHeight;
+    
+    // Login
+    try {
+      const result = await window.api.loginFacebookWith2FA({
+        email: account.email,
+        password: account.password,
+        twoFASecret: account.twoFASecret
+      });
+      
+      if (result.success) {
+        successCount++;
+        
+        // Add to state
+        state.accounts.set(result.accountId, {
+          userName: result.userName,
+          fanpages: [],
+          selectedFanpages: []
+        });
+        
+        // Update item
+        item.style.borderLeftColor = '#4caf50';
+        item.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.2rem;">✅</span>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #4caf50;">${account.email}</div>
+              <div style="font-size: 0.85rem; color: #999; margin-top: 4px;">Thành công → ${result.userName}</div>
+            </div>
+          </div>
+        `;
+        
+        // Load fanpages in background
+        loadFanpagesInBackground(result.accountId);
+        
+      } else {
+        failedCount++;
+        
+        item.style.borderLeftColor = '#ff4444';
+        item.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.2rem;">❌</span>
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #ff4444;">${account.email}</div>
+              <div style="font-size: 0.85rem; color: #999; margin-top: 4px;">Lỗi: ${result.error}</div>
+            </div>
+          </div>
+        `;
+      }
+    } catch (error) {
+      failedCount++;
+      
+      item.style.borderLeftColor = '#ff4444';
+      item.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">❌</span>
+          <div style="flex: 1;">
+            <div style="font-weight: 600; color: #ff4444;">${account.email}</div>
+            <div style="font-size: 0.85rem; color: #999; margin-top: 4px;">Exception: ${error.message}</div>
+          </div>
+        </div>
+      `;
+    }
+    
+    resultsDiv.scrollTop = resultsDiv.scrollHeight;
+    
+    // Delay 3s giữa các account
+    if (i < accounts.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+  
+  // Done
+  startBtn.disabled = false;
+  startBtn.textContent = '🚀 Đăng Nhập Tất Cả';
+  
+  statusEl.textContent = `✅ Hoàn tất: ${successCount} thành công, ${failedCount} thất bại`;
+  statusEl.style.color = successCount > 0 ? '#4caf50' : '#ff4444';
+  
+  // Show app screen if any success
+  if (successCount > 0) {
+    setTimeout(() => {
+      hideQuickLoginDialog();
+      showAppScreen();
+      renderAccountsList();
+      
+      // Switch to first account
+      const firstAccountId = state.accounts.keys().next().value;
+      if (firstAccountId) {
+        switchToAccount(firstAccountId);
+      }
+    }, 2000);
+  }
 }
 
 // ==================== INITIALIZE ====================

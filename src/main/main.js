@@ -78,15 +78,53 @@ ipcMain.handle('clear-all-saved-accounts', async () => {
 });
 
 // Authentication
-ipcMain.handle('login-facebook', async (event, { email, password, saveSession }) => {
+ipcMain.handle('login-facebook', async (event, { email, password, saveSession, twoFASecret }) => {
   try {
-    const FacebookAutomation = require('./automation/facebook');
     const accountId = Date.now().toString();
+    
+    // Nếu có 2FA secret, dùng FacebookWith2FA
+    if (twoFASecret && twoFASecret.trim()) {
+      const FacebookWith2FA = require('./automation/FacebookWith2FA');
+      const automation = new FacebookWith2FA(mainWindow);
+      
+      const result = await automation.loginWith2FA({
+        email,
+        password,
+        twoFASecret: twoFASecret.trim()
+      }, false); // Hiển thị browser để debug 2FA
+      
+      if (result.success) {
+        // Save account
+        let sessionData = null;
+        if (saveSession) {
+          sessionData = result.sessionData;
+        }
+        
+        // Chuyển sang FacebookAutomation thường để quản lý
+        const FacebookAutomation = require('./automation/facebook');
+        const normalAutomation = new FacebookAutomation(mainWindow);
+        normalAutomation.browser = automation.browser;
+        normalAutomation.context = automation.context;
+        normalAutomation.page = automation.page;
+        
+        await accountManager.addAccount(accountId, result.userName, sessionData, normalAutomation);
+        
+        return {
+          success: true,
+          accountId,
+          userName: result.userName
+        };
+      }
+      
+      return result;
+    }
+    
+    // Login thường (không có 2FA)
+    const FacebookAutomation = require('./automation/facebook');
     const automation = new FacebookAutomation(mainWindow);
     
     // Login with headless mode (browser hidden)
-    // DEBUG: Tạm thời hiển thị browser
-    const result = await automation.login(email, password, false);
+    const result = await automation.login(email, password, true); // ⚡ HEADLESS: true
     
     if (result.success) {
       // Save session if requested
@@ -105,6 +143,145 @@ ipcMain.handle('login-facebook', async (event, { email, password, saveSession })
     }
     
     return result;
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Login with 2FA
+ipcMain.handle('login-facebook-with-2fa', async (event, credentials) => {
+  try {
+    const FacebookWith2FA = require('./automation/FacebookWith2FA');
+    const path = require('path');
+    const os = require('os');
+    
+    const accountId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
+    const automation = new FacebookWith2FA(mainWindow);
+    
+    // Tạo thư mục persistent context cho account này
+    const userDataDir = path.join(os.tmpdir(), 'fb-page-manager-profiles', accountId);
+    
+    const result = await automation.loginWith2FA(credentials, false, userDataDir); // Hiển thị browser + persistent
+    
+    if (result.success) {
+      // Chuyển sang FacebookAutomation thường để quản lý
+      const FacebookAutomation = require('./automation/facebook');
+      const normalAutomation = new FacebookAutomation(mainWindow);
+      normalAutomation.browser = automation.browser;
+      normalAutomation.context = automation.context;
+      normalAutomation.page = automation.page;
+      
+      await accountManager.addAccount(accountId, result.userName, result.sessionData, normalAutomation);
+      
+      return {
+        success: true,
+        accountId,
+        userName: result.userName
+      };
+    }
+    
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Parse accounts text
+ipcMain.handle('parse-accounts-text', async (event, text) => {
+  try {
+    const AccountImporter = require('./utils/AccountImporter');
+    const accounts = AccountImporter.parseMultipleLines(text);
+    
+    // Validate each account
+    const validatedAccounts = accounts.map(account => {
+      const validation = AccountImporter.validate(account);
+      return {
+        ...account,
+        valid: validation.valid,
+        errors: validation.errors
+      };
+    });
+    
+    return {
+      success: true,
+      accounts: validatedAccounts
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Import multiple accounts with 2FA
+ipcMain.handle('import-accounts-with-2fa', async (event, accounts) => {
+  try {
+    const FacebookWith2FA = require('./automation/FacebookWith2FA');
+    const FacebookAutomation = require('./automation/facebook');
+    const path = require('path');
+    const os = require('os');
+    const results = [];
+    
+    for (const account of accounts) {
+      try {
+        const accountId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
+        const automation = new FacebookWith2FA(mainWindow);
+        
+        // Tạo persistent context cho mỗi account
+        const userDataDir = path.join(os.tmpdir(), 'fb-page-manager-profiles', accountId);
+        
+        const result = await automation.loginWith2FA({
+          email: account.email,
+          password: account.password,
+          twoFASecret: account.twoFASecret
+        }, true, userDataDir); // Headless + persistent
+        
+        if (result.success) {
+          // Chuyển sang FacebookAutomation thường
+          const normalAutomation = new FacebookAutomation(mainWindow);
+          normalAutomation.browser = automation.browser;
+          normalAutomation.context = automation.context;
+          normalAutomation.page = automation.page;
+          
+          await accountManager.addAccount(accountId, result.userName, result.sessionData, normalAutomation);
+          
+          results.push({
+            success: true,
+            email: account.email,
+            userName: result.userName,
+            accountId
+          });
+        } else {
+          results.push({
+            success: false,
+            email: account.email,
+            error: result.error
+          });
+        }
+        
+        // Đợi 3 giây giữa các account để tránh spam
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+      } catch (error) {
+        results.push({
+          success: false,
+          email: account.email,
+          error: error.message
+        });
+      }
+    }
+    
+    return {
+      success: true,
+      results
+    };
   } catch (error) {
     return {
       success: false,
@@ -236,7 +413,7 @@ ipcMain.handle('delete-photos', async (event, { accountId, fanpageId, photoIds, 
         fanpageId,
         pageInfo,
         sessionState,
-        false // DEBUG: Hiển thị browser
+        false // 🔍 DEBUG MODE: Hiển thị browser để debug
       );
       
       if (!createResult.success) {
@@ -251,7 +428,7 @@ ipcMain.handle('delete-photos', async (event, { accountId, fanpageId, photoIds, 
 
     // SỬ DỤNG page của fanpage browser đã có sẵn
     const HeadlessDeleter = require('./automation/headless-deleter');
-    const headlessDeleter = new HeadlessDeleter(mainWindow, 1);
+    const headlessDeleter = new HeadlessDeleter(mainWindow, 5); // Tăng từ 1 → 5 browsers
     
     const fanpageUrl = fanpageBrowser.pageInfo.url;
     
@@ -354,7 +531,7 @@ ipcMain.handle('upload-photos-headless', async (event, { accountId, fanpageId, p
         fanpageId,
         pageInfo,
         sessionState,
-        false // DEBUG: Hiển thị browser
+        true // ⚡ HEADLESS: true
       );
       
       if (!createResult.success) {
@@ -369,7 +546,7 @@ ipcMain.handle('upload-photos-headless', async (event, { accountId, fanpageId, p
 
     // Sử dụng browser riêng của fanpage để upload
     const HeadlessUploader = require('./automation/headless-uploader');
-    const headlessUploader = new HeadlessUploader(mainWindow, 10);
+    const headlessUploader = new HeadlessUploader(mainWindow, 15); // Tăng từ 10 → 15 browsers
     
     // Lấy session từ context của fanpage browser
     const sessionState = await fanpageBrowser.context.storageState();

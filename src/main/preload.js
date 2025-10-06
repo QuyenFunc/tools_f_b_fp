@@ -10,8 +10,13 @@ contextBridge.exposeInMainWorld('api', {
   
   // Authentication
   loginFacebook: (credentials) => ipcRenderer.invoke('login-facebook', credentials),
+  loginFacebookWith2FA: (credentials) => ipcRenderer.invoke('login-facebook-with-2fa', credentials),
   loginAccountWithSession: (accountId, sessionData) => ipcRenderer.invoke('login-account-with-session', { accountId, sessionData }),
   logoutAccount: (accountId) => ipcRenderer.invoke('logout-account', accountId),
+  
+  // Import accounts
+  parseAccountsText: (text) => ipcRenderer.invoke('parse-accounts-text', text),
+  importAccountsWith2FA: (accounts) => ipcRenderer.invoke('import-accounts-with-2fa', accounts),
   
   // Fanpage operations
   getFanpages: (accountId) => ipcRenderer.invoke('get-fanpages', accountId),

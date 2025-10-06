@@ -80,7 +80,7 @@ class HeadlessUploader {
     try {
       // Scroll lên top
       await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(500); // Giảm từ 1000ms → 500ms
+      await page.waitForTimeout(300); // Tối ưu: 500ms → 300ms
       
       // BƯỚC 1: Click nút "Ảnh/video" TRỰC TIẾP
       this.log(`[Browser ${browserIndex}] Click Anh/video...`, 'info');
@@ -142,7 +142,7 @@ class HeadlessUploader {
       }
       
       this.log(`[Browser ${browserIndex}] ✓ Clicked`, 'success');
-      await page.waitForTimeout(800); // Giảm từ 1500ms → 800ms
+      await page.waitForTimeout(500); // Tối ưu: 800ms → 500ms
       
       // BƯỚC 2: Upload file
       this.log(`[Browser ${browserIndex}] Upload file...`, 'info');
@@ -158,7 +158,7 @@ class HeadlessUploader {
       this.log(`[Browser ${browserIndex}] ✓ Uploaded`, 'success');
       
       // Đợi popup "Tạo bài viết" xuất hiện
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(2000); // Tối ưu: 3000ms → 2000ms
       
       // BƯỚC 3: Điền caption vào Lexical editor của Facebook
       if (caption && caption.trim()) {
@@ -241,7 +241,7 @@ class HeadlessUploader {
           
           if (captionAdded) {
             this.log(`[Browser ${browserIndex}] ✓ Caption: "${caption}"`, 'success');
-            await page.waitForTimeout(1200); // Đợi Lexical xử lý
+            await page.waitForTimeout(800); // Tối ưu: 1200ms → 800ms
           } else {
             this.log(`[Browser ${browserIndex}] ⚠️ Không tìm thấy editor`, 'warning');
           }
@@ -249,7 +249,7 @@ class HeadlessUploader {
           this.log(`[Browser ${browserIndex}] Lỗi: ${e.message}`, 'error');
         }
       } else {
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(300); // Tối ưu: 500ms → 300ms
       }
       
       // BƯỚC 4: Click nút "Tiếp" (nút xanh đầu tiên)
@@ -283,10 +283,10 @@ class HeadlessUploader {
       if (clickedNext) {
         this.log(`[Browser ${browserIndex}] ✓ Tiep`, 'success');
         // Đợi màn hình tiếp theo load
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(1500); // Tối ưu: 2000ms → 1500ms
       } else {
         this.log(`[Browser ${browserIndex}] Skip Tiep (khong co nut)`, 'info');
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(300); // Tối ưu: 500ms → 300ms
       }
       
       // BƯỚC 5: Click nút "Đăng" (nút xanh cuối cùng)
@@ -330,8 +330,8 @@ class HeadlessUploader {
       
       this.log(`[Browser ${browserIndex}] ✓ Posted`, 'success');
       
-      // Đợi post submit - GIẢM THỜI GIAN
-      await page.waitForTimeout(2000); // Giảm từ 5000ms → 2000ms
+      // Đợi post submit - TỐI ƯU
+      await page.waitForTimeout(1500); // Tối ưu: 2000ms → 1500ms
       
       return { success: true, photo: photo.name };
     } catch (error) {
@@ -347,16 +347,17 @@ class HeadlessUploader {
   // Upload nhiều ảnh trên 1 headless browser (RIÊNG BIỆT, KHÔNG ẢNH HƯỞNG TRANG CHÍNH)
   async uploadInBrowser(chunk, captions) {
     const browser = await chromium.launch({
-      headless: false, // 🔑 DEBUG: Hiển thị browser để debug
+      headless: true, // ⚡ HEADLESS: Tăng tốc độ
       args: [
-        '--start-maximized',
         '--no-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--disable-dev-tools',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
-        '--disable-background-timer-throttling'
+        '--disable-background-timer-throttling',
+        '--disable-features=TranslateUI',
+        '--disable-extensions'
       ]
     });
 
@@ -382,7 +383,7 @@ class HeadlessUploader {
         waitUntil: 'domcontentloaded', 
         timeout: 10000 
       });
-      await page.waitForTimeout(1500); // Giảm từ 3000ms → 1500ms
+      await page.waitForTimeout(1000); // Tối ưu: 1500ms → 1000ms
 
       this.log(`[Browser ${chunk.browserIndex}] Da vao facebook.com, san sang upload ${chunk.photos.length} anh`, 'success');
 
@@ -418,14 +419,14 @@ class HeadlessUploader {
 
         // Sau mỗi ảnh, quay lại facebook.com - TỐI ƯU
         if (i < chunk.photos.length - 1) {
-          await page.waitForTimeout(1000); // Giảm từ 2000ms
+          await page.waitForTimeout(800); // Tối ưu: 1000ms → 800ms
           
           this.log(`[Browser ${chunk.browserIndex}] Reload...`, 'info');
           await page.goto('https://www.facebook.com/', { 
             waitUntil: 'domcontentloaded', 
-            timeout: 10000 // Giảm từ 15000ms
+            timeout: 8000 // Tối ưu: 10000ms → 8000ms
           });
-          await page.waitForTimeout(800); // Giảm từ 2000ms
+          await page.waitForTimeout(600); // Tối ưu: 800ms → 600ms
         }
       }
 

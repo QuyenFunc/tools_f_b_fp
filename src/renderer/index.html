@@ -36,6 +36,12 @@
               <input type="password" id="password" name="password" required autocomplete="current-password">
             </div>
             
+            <div class="form-group">
+              <label for="twoFASecret">2FA Secret (tùy chọn)</label>
+              <input type="text" id="twoFASecret" name="twoFASecret" placeholder="Nhập secret key nếu có 2FA" autocomplete="off">
+              <small style="color: #999; display: block; margin-top: 5px;">Hoặc <a href="#" id="showImportLink" style="color: #1877f2;">import nhiều tài khoản</a></small>
+            </div>
+            
             <div class="form-group checkbox">
               <label>
                 <input type="checkbox" id="saveSession" name="saveSession" checked>
@@ -45,6 +51,12 @@
 
             <button type="submit" class="btn btn-primary btn-large">Đăng nhập</button>
           </form>
+          
+          <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #444;">
+            <button id="quickLoginBtn" class="btn btn-secondary" style="width: 100%; font-size: 1rem; padding: 12px;">
+              ⚡ Đăng Nhập Nhanh (Paste danh sách)
+            </button>
+          </div>
         </div>
 
         <div class="info-box">
@@ -52,7 +64,8 @@
           <ul>
             <li>Có thể thêm nhiều tài khoản và làm việc song song</li>
             <li>Thông tin được mã hóa an toàn</li>
-            <li>Hỗ trợ xác minh 2FA</li>
+            <li>Hỗ trợ xác minh 2FA tự động</li>
+            <li>Import hàng loạt tài khoản với 2FA</li>
           </ul>
         </div>
       </div>
@@ -202,7 +215,10 @@
 
         <!-- History -->
         <div class="queue-section">
-          <h4>Lịch sử</h4>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h4 style="margin: 0;">Lịch sử</h4>
+            <button id="clearHistoryBtn" class="btn-secondary" style="padding: 4px 10px; font-size: 0.8rem;">Xóa lịch sử</button>
+          </div>
           <div id="taskHistory" class="task-history">
             <p class="empty-state">Chưa có lịch sử</p>
           </div>
@@ -218,6 +234,51 @@
           <div id="progressBar" class="progress-fill"></div>
         </div>
         <p id="progressText">Vui lòng đợi...</p>
+      </div>
+    </div>
+
+    <!-- Quick Login Dialog -->
+    <div id="quickLoginDialog" class="dialog-overlay" style="display: none;">
+      <div class="dialog-card" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+        <div class="dialog-header">
+          <h3>⚡ Đăng Nhập Nhanh - Tự Động Đăng Nhập Tất Cả</h3>
+          <button id="closeQuickLoginBtn" class="btn-close">×</button>
+        </div>
+        
+        <div class="dialog-body">
+          <div style="background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+            <p style="margin: 0; color: #4caf50; font-weight: 600;">📋 Hướng dẫn:</p>
+            <ol style="margin: 10px 0 0 20px; color: #999; font-size: 0.9rem;">
+              <li>Paste danh sách tài khoản vào ô bên dưới</li>
+              <li>Format: <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">PageID|PageName|2FA_Secret|Email|Password|App_Password</code></li>
+              <li>Nhấn "Đăng Nhập Tất Cả" và chờ hệ thống tự động xử lý</li>
+            </ol>
+          </div>
+          
+          <textarea 
+            id="quickLoginText" 
+            placeholder="Paste danh sách tài khoản vào đây (mỗi dòng 1 tài khoản)...
+
+Ví dụ:
+61568434832204|Moimedia@@|YDTCEYESIW4LBVLKK3A5HW3ZJKQ3SAF2|chelcabula@outlook.com|Moimedia@@@|chelcabulamoi@smvmail.com
+61578284326156|Xahoiden|2PZMMWKRLMYDHYOCRJDDEBR2KON3YUTP|hantrinh9024@gmail.com|Khanh@9999|eu7a 36qh..."
+            style="width: 100%; min-height: 350px; padding: 12px; border: 1px solid #444; border-radius: 8px; background: #1a1a1a; color: #fff; font-family: monospace; font-size: 0.9rem; resize: vertical;"
+          ></textarea>
+          
+          <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">
+            <button id="quickLoginStartBtn" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 1rem;">
+              🚀 Đăng Nhập Tất Cả
+            </button>
+            <span id="quickLoginStatus" style="color: #999; font-size: 0.9rem;"></span>
+          </div>
+          
+          <div id="quickLoginProgress" style="margin-top: 20px; display: none;">
+            <div style="background: #2a2a2a; padding: 15px; border-radius: 8px;">
+              <h4 style="margin: 0 0 10px 0;">Tiến Trình: <span id="quickLoginCount">0/0</span></h4>
+              <div style="max-height: 300px; overflow-y: auto;" id="quickLoginResults"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
